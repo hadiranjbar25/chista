@@ -1,0 +1,82 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import App from './App';
+beforeEach(() => localStorage.clear());
+afterEach(cleanup);
+describe('workspace and safe session regressions', () => {
+  it('preserves artifacts across navigation and isolates new sessions', async () => {
+    const user=userEvent.setup();render(<App/>);
+    await user.click(screen.getByRole('button',{name:'Load sample session'}));
+    expect(within(screen.getByRole('main')).getByText('checkout-production.log')).toBeTruthy();
+    await user.click(screen.getByRole('button',{name:'Settings'}));
+    await user.click(screen.getByRole('button',{name:'MCP'}));
+    expect(screen.getByRole('heading',{name:'MCP servers'})).toBeTruthy();
+    await user.click(screen.getByRole('button',{name:'Sessions'}));
+    expect(within(screen.getByRole('main')).getByText('checkout-production.log')).toBeTruthy();
+    await user.click(screen.getByRole('button',{name:'New session'}));
+    expect(within(screen.getByRole('main')).queryByText('checkout-production.log')).toBeNull();
+    await user.selectOptions(screen.getByRole('combobox',{name:'Selected session'}),screen.getByRole('option',{name:'Debug session 1'}));
+    expect(within(screen.getByRole('main')).getByText('checkout-production.log')).toBeTruthy();
+    expect(localStorage.getItem('chista.projects.v1')).not.toContain('alex@example.com');
+  });
+  it('attaches only a reviewed snapshot, and artifact changes revoke it', async () => {
+    const user=userEvent.setup();render(<App/>);
+    await user.click(screen.getByRole('button',{name:'Load sample session'}));
+    await user.click(screen.getByRole('button',{name:'Prepare context'}));
+    const dialog=screen.getByRole('dialog',{name:'Review context before export'});
+    expect(dialog.textContent).not.toContain('alex@example.com');
+    expect((within(dialog).getByRole('button',{name:'Attach to session chat'}) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(within(dialog).getByRole('checkbox'));
+    await user.click(within(dialog).getByRole('button',{name:'Attach to session chat'}));
+    await user.click(screen.getByRole('button',{name:'Agent chat'}));
+    expect(screen.getByText(/characters of reviewed context attached/)).toBeTruthy();
+    await user.click(screen.getByRole('button',{name:'Safe Debug'}));
+    await user.click(screen.getByRole('button',{name:'Remove requests.csv'}));
+    await user.click(screen.getByRole('button',{name:'Agent chat'}));
+    expect(screen.getByText(/No debug files attached/)).toBeTruthy();
+  });
+  it('shows the local mapping without leaking originals into the agent preview', async () => {
+    const user=userEvent.setup();render(<App/>);
+    await user.click(screen.getByRole('button',{name:'Load sample session'}));
+    await user.click(screen.getByRole('button',{name:'Mappings'}));
+    const mapping=screen.getByRole('region',{name:'Local redaction mappings'});
+    expect(within(mapping).getByText('alex@example.com')).toBeTruthy();
+    const row=within(mapping).getByText('alex@example.com').closest('tr')!;
+    expect(row.textContent).toContain('[EMAIL_1]');
+    expect(row.textContent).toContain('checkout-production.log');
+    expect(row.textContent).toContain('requests.csv');
+    await user.click(within(mapping).getByLabelText('Hide original values'));
+    expect(within(mapping).queryByText('alex@example.com')).toBeNull();
+    await user.click(screen.getByRole('button',{name:'Prepare context'}));
+    const preview=screen.getByRole('dialog',{name:'Review context before export'});
+    expect(preview.textContent).not.toContain('alex@example.com');
+    await user.click(within(preview).getByRole('checkbox'));
+    await user.click(within(preview).getByRole('button',{name:'Attach to session chat'}));
+    expect(screen.getByRole('heading',{name:/Agent ·/})).toBeTruthy();
+    await user.type(screen.getByLabelText('Session message'),'Investigate the masked events');
+    await user.click(screen.getByRole('button',{name:'Review request'}));
+    const outgoing=screen.getByRole('dialog',{name:'Approve outgoing request'});
+    expect(outgoing.textContent).toContain('[EMAIL_1]');
+    for(const raw of ['alex@example.com','sam@example.com','sk-demoSecret123456','checkout-production.log'])expect(outgoing.textContent).not.toContain(raw);
+  });
+  it('requires preview for demo chat and scopes history to the selected session', async () => {
+    const user=userEvent.setup();render(<App/>);
+    await user.click(screen.getByRole('button',{name:'Settings'}));
+    await user.click(screen.getByRole('button',{name:'Models'}));
+    await user.selectOptions(screen.getByLabelText('Active agent'),'demo');
+    await user.click(screen.getByRole('button',{name:'Sessions'}));
+    await user.click(screen.getByRole('button',{name:'Agent chat'}));
+    await user.type(screen.getByLabelText('Session message'),'Investigate alex@example.com');
+    await user.click(screen.getByRole('button',{name:'Review request'}));
+    const dialog=screen.getByRole('dialog',{name:'Approve outgoing request'});
+    expect(dialog.textContent).not.toContain('alex@example.com');expect(dialog.textContent).toContain('[CHAT_EMAIL_1]');
+    await user.click(within(dialog).getByRole('button',{name:'Approve demo response'}));
+    expect(await screen.findByText(/Demo response — no model was contacted/)).toBeTruthy();
+    await user.click(screen.getByRole('button',{name:'New session'}));
+    await user.click(screen.getByRole('button',{name:'Agent chat'}));
+    // The prior session remains mounted but its transcript is hidden.
+    expect(screen.getAllByText(/Demo response — no model was contacted/).every(node => node.closest('[hidden]'))).toBe(true);
+  });
+});
