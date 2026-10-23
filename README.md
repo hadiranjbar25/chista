@@ -1,8 +1,10 @@
 # Chista
 
-**Turn debug files into useful agent context—without handing over the originals.**
+**Chat about a bug. Get an answer—and an interactive view when it helps.**
 
-Chista is a desktop debugging workspace for investigating logs, request data and configuration files with an AI agent. Import your artifacts, redact sensitive values on your device, inspect the original-to-placeholder mapping, and decide exactly which sanitized context the agent receives.
+Chista is a desktop chat workspace for debugging with an AI agent. Type in the composer at the bottom; answers appear above it as text and, when useful, generated OpenUI charts, tables and follow-up controls. Start a session and optionally include multiple repos or sanitized debug files.
+
+The sidebar contains recent sessions. Settings lives in the top right. Repo selection and file review open only when you need them; they are not steps you must complete before chatting.
 
 Redaction happens locally. AI analysis runs through your configured hosted provider or Claude Code. Chista does not run or download a local model.
 
@@ -58,7 +60,7 @@ For example:
 
 The Mappings tab lets you look up those placeholders, see where they appear and hide originals on screen. Neither the mapping nor original filenames are included in context exports, hosted requests or the Claude copy action.
 
-Pattern detection can miss sensitive information. Review the output and add custom redactions before approving a handoff. Claude Code runs independently and can access files already in its selected project under its native permissions; Chista does not send it imported files automatically.
+Pattern detection can miss sensitive information. Review the output and add custom redactions before approving a handoff. Claude Code runs independently and can access files already in its selected repository under its native permissions; Chista does not send it imported files automatically.
 
 ## What you can do
 
@@ -66,7 +68,7 @@ Pattern detection can miss sensitive information. Review the output and add cust
 - **Understand every replacement:** review sanitized previews and search a local mapping of originals, placeholders, occurrence counts and source files.
 - **Explore the evidence:** compare artifacts and use OpenUI charts, searchable tables and follow-up controls. These views use local heuristics, not AI diagnoses.
 - **Give the agent focused context:** select artifacts, remove duplicate lines, set a content budget and review the exact payload before sharing.
-- **Keep investigations separate:** switch between projects and sessions without mixing their artifacts, mappings or chat histories.
+- **Keep investigations separate:** switch between sessions and their included repos without mixing their artifacts, mappings or chat histories.
 - **Control tool access:** connect MCP servers and approve each tool invocation with its exact arguments. Tool results are not forwarded to a model automatically.
 
 ## Run
@@ -82,20 +84,31 @@ npm run tauri build
 
 Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) separately. No local model, Ollama, model download or inference server is used.
 
-## Workspace
+## Everyday flow
 
-The sidebar keeps day-to-day work separate from setup:
+1. **Start a session.** The conversation opens immediately with a text box at the bottom.
+2. **Chat.** Press Enter or Send; use Shift+Enter for a new line. Demo responses are explicitly labeled. Choose a hosted provider in the top-right Settings for real AI answers.
+3. **Add context when needed.** Use **Repos** to include one or more registered checkouts. Use **Files & mappings** or **Add files** to import, mask and review debug data.
+4. **Explore the response.** The agent can combine text with OpenUI charts, searchable tables and follow-up buttons. A follow-up fills the composer so you can edit it before sending.
 
-| View | Purpose |
+Repositories form a shared catalog; sessions are independent investigations. One repo can be included in several sessions. Including a repo does not read or upload its files. Claude Code launches in one included repo at a time.
+
+| Control | Purpose |
 | --- | --- |
-| **Projects** | Choose a codebase and set the directory where Claude Code should launch. |
-| **Sessions** | Work through Safe Debug and agent chat in an independent investigation. |
-| **Artifacts** | Import, select and review files belonging to the current session. |
-| **Settings → Models** | Select Claude Code, configure a hosted provider or use the labeled demo assistant. |
-| **Settings → MCP** | Configure servers, check connection status and discover available tools. |
-| **Settings → General** | Understand data handling and clear saved project metadata. |
+| **New session / recent sessions** | Start or return to a conversation with isolated artifacts, mappings and history. |
+| **Repos → Manage repos** | Register existing checkouts and choose which ones a session includes. |
+| **Files & mappings** | Import, mask and inspect artifacts before handing sanitized context to the agent. |
+| **Top-right Settings → Models** | Choose a hosted chat provider, demo mode or the external Claude Code terminal integration. |
+| **Settings → MCP** | Configure servers and discover tools; tool controls stay hidden in chat until a server is connected. |
+| **Settings → General** | Review data handling and clear saved repository metadata. |
 
-Only project names and directory paths are saved between app launches. Sessions, artifacts, mappings, chat and integration credentials stay in memory. Navigating between views preserves the current session; restarting the app clears it.
+Only repository names and directory paths survive app restarts. Previously saved project entries migrate into the repo catalog. Sessions, artifacts, mappings, chat and integration credentials remain in memory.
+
+## Generated response UI
+
+Hosted agents receive a response contract for text plus optional chart, table and follow-up blocks. Chista validates those blocks and renders them through an allowlisted OpenUI component library. It does not execute model-provided JavaScript, HTML, network requests or tool calls. Invalid structured replies fall back to escaped text.
+
+Charts support selecting categories, tables support searching, and follow-ups populate the composer. Plain-text responses work too. Demo mode builds example widgets from the attached sanitized context; it does not pretend to be a connected model. To try it, open **Files & mappings**, load the sample session, prepare and attach reviewed context, then ask “Show patterns.”
 
 ## Safe Debug Sessions
 
@@ -119,19 +132,19 @@ The app starts in demo mode. Selecting an integration does not send data or prov
 
 ### Claude Code
 
-1. Set the selected project's absolute directory in Projects.
-2. In Settings → Models, choose **Claude Code**. Check installation; optionally enter an absolute executable path. Detection checks PATH and common installation locations, including `~/.local/bin/claude`.
-3. In the session's Agent chat, choose **Launch Claude Code**. On macOS it opens Terminal via AppleScript; on Linux it uses `x-terminal-emulator`. Windows launch is not implemented.
+1. Register repository directories in Repos, create a session, and select the repos to include.
+2. In the top-right Settings → Models, choose **Claude Code**. Check installation; optionally enter an absolute executable path. Detection checks PATH and common installation locations, including `~/.local/bin/claude`.
+3. In the session chat, select a **Launch repository** from its included repos and choose **Launch Claude Code**. On macOS it opens Terminal via AppleScript; on Linux it uses `x-terminal-emulator`. Windows launch is not implemented.
 
-The launcher starts the installed `claude` executable in the project directory, without a prompt or credentials. Claude handles its own native sign-in, trust and tool approval flow. Chista never runs an invented login command, collects Claude credentials, injects imported debug files, or captures terminal output. Launch success means Terminal opened, not that the CLI is authenticated.
+The launcher starts the installed `claude` executable in the repository directory, without a prompt or credentials. Claude handles its own native sign-in, trust and tool approval flow. Chista never runs an invented login command, collects Claude credentials, injects imported debug files, or captures terminal output. Launch success means Terminal opened, not that the CLI is authenticated.
 
-Claude runs independently and can read files already in its project directory under its native permissions. Keep raw debug files outside that directory. Chista does not copy imported artifacts into projects. Reviewed context can be copied with **Copy sanitized context for Claude** and pasted into its terminal; the mapping and originals are excluded. It is not automatically passed to Claude. See the [Claude Code quickstart](https://code.claude.com/docs/en/quickstart).
+Claude runs independently and can read files already in its repository directory under its native permissions. Keep raw debug files outside that directory. Chista does not copy imported artifacts into repositories. Reviewed context can be copied with **Copy sanitized context for Claude** and pasted into its terminal; the mapping and originals are excluded. It is not automatically passed to Claude. See the [Claude Code quickstart](https://code.claude.com/docs/en/quickstart).
 
 ### Hosted model providers
 
 `src/integrations/providers.ts` defines `ModelProvider`, `ModelRequest` and the provider implementations. The optional hosted adapter accepts an HTTPS chat-completions endpoint, a model identifier and optional API bearer token. It sends `{ model, stream: false, messages }` and expects `choices[0].message.content`. This is a compatible-endpoint adapter, not a universal adapter for every vendor API. Add another implementation of `ModelProvider` for a different protocol.
 
-The exact JSON body, including instructions, sanitized history and reviewed context, is previewed before each send. No tool execution is delegated to model responses. Tokens/configuration remain in memory. Requests have cancellation and a 60-second timeout. Status distinguishes configured, connecting, last-successful and failed states. There are no background model calls. Browser preview blocks live network integrations and supports the labeled demo assistant.
+For hosted providers, the exact JSON body, including instructions, sanitized history and reviewed context, is previewed before each send. Demo messages run immediately without a network request. Structured UI follows the response contract in `src/AgentResponse.tsx`. No tool execution is delegated to model responses. Tokens/configuration remain in memory. Requests have cancellation and a 60-second timeout. Status distinguishes configured, connecting, last-successful and failed states. There are no background model calls. Browser preview blocks live network integrations and supports the labeled demo assistant.
 
 ## MCP tools
 
@@ -145,10 +158,10 @@ MCP configurations and tokens currently last for this app run. Disconnect before
 
 ## Data boundaries
 
-Raw files, original filenames, placeholder mappings, custom terms, chat history and reviewed snapshots live in memory. Only project metadata goes into localStorage. Native code exposes narrow Claude detection/launch commands, plus scoped HTTP access; no general filesystem or shell plugin is enabled. The provider receives only the approved snapshot and sanitized chat strings. The application does not log payloads or credentials. Releasing references is not a secure memory-erasure guarantee.
+Raw files, original filenames, placeholder mappings, custom terms, chat history and reviewed snapshots live in memory. Only repository metadata goes into localStorage. Native code exposes narrow Claude detection/launch commands, plus scoped HTTP access; no general filesystem or shell plugin is enabled. The provider receives only the approved snapshot and sanitized chat strings. The application does not log payloads or credentials. Releasing references is not a secure memory-erasure guarantee.
 
 ## Validation and current blockers
 
-Frontend tests cover the existing sanitizer/OpenUI renderer plus session isolation, navigation preservation, reviewed-context revocation, chat preview, exact provider payloads, one-time tool approval, and SDK initialization/discovery/call/disconnect against a mock HTTP transport. `npm run build` verifies TypeScript and bundles the frontend.
+The 24 frontend tests cover text and generated OpenUI replies, the sanitizer, repository membership/migration, and session isolation, navigation preservation, reviewed-context revocation, chat preview, exact provider payloads, one-time tool approval, and SDK initialization/discovery/call/disconnect against a mock HTTP transport. `npm run build` verifies TypeScript and bundles the frontend.
 
 Native compilation and Rust launcher tests require Rust/Cargo, which were unavailable in the implementation environment. The Claude binary was not visible on PATH or at common install paths there; the executable override supports installations outside those paths. Live model/MCP credentials were not provided, so protocol behavior was tested with fixtures, not a real external service. Native terminal launch and the Tauri HTTP bridge still need a desktop smoke test after installing the toolchain.

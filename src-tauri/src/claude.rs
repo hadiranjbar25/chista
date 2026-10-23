@@ -23,10 +23,10 @@ pub fn claude_status(executable_path: String) -> Result<String, String> {
     resolve_claude(&executable_path).map(|p| p.to_string_lossy().into_owned())
 }
 #[tauri::command]
-pub fn launch_claude(project_path: String, executable_path: String) -> Result<String, String> {
-    let project = PathBuf::from(project_path);
-    if !project.is_absolute() || !project.is_dir() { return Err("Select an existing absolute project directory.".into()); }
-    let project = project.canonicalize().map_err(|_| "Project directory is inaccessible.")?;
+pub fn launch_claude(repo_path: String, executable_path: String) -> Result<String, String> {
+    let project = PathBuf::from(repo_path);
+    if !project.is_absolute() || !project.is_dir() { return Err("Select an existing absolute repository directory.".into()); }
+    let project = project.canonicalize().map_err(|_| "Repository directory is inaccessible.")?;
     let binary = resolve_claude(&executable_path)?;
     // No prompt, debug file, context payload or credential is passed to the external agent.
     #[cfg(target_os = "macos")]
