@@ -22,11 +22,11 @@ describe('conversation workspace',()=>{
     expect(screen.getByRole('button',{name:'Settings'}).closest('header')).toBeTruthy();
     expect(screen.queryByRole('button',{name:'Debug this issue'})).toBeNull();
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Help me investigate{Enter}');
-    expect(await screen.findByText(/Claude Code chat requires the Tauri desktop app/)).toBeTruthy();
+    expect(await screen.findByText(/Codex chat requires the Tauri desktop app/)).toBeTruthy();
     expect(screen.getByRole('log').querySelectorAll('.message')).toHaveLength(0);
     await user.click(screen.getByRole('button',{name:'Agent settings'}));
     const selector=screen.getByLabelText('Active agent') as HTMLSelectElement;
-    expect(selector.value).toBe('claude');
+    expect(selector.value).toBe('codex');
     expect(Array.from(selector.options).map(o=>o.value)).toEqual(['claude','codex','hosted']);
   });
   it('switches between Claude and Codex from chat and Settings',async()=>{
