@@ -5,24 +5,25 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: bridge.invoke,
   Channel: class { onmessage: (event: unknown) => void = () => {}; },
 }));
-import { claudeProvider, claudePayload, streamingProse } from './claude';
+import { claudeProvider, codexProvider, claudePayload, streamingProse } from './claude';
 import { prepareRequest } from './providers';
 import { Sanitizer } from '../safety';
 beforeEach(() => { bridge.desktop = true; bridge.invoke.mockReset(); });
-it('streams only text and sends exactly the reviewed sanitized payload', async () => {
+it.each(['claude', 'codex'] as const)('%s sends exactly the reviewed sanitized payload and handles message events', async agent => {
+  const provider = agent === 'codex' ? codexProvider : claudeProvider;
   const request = prepareRequest([], 'Investigate alex@example.com', 'user=[EMAIL_1]', new Sanitizer('CHAT'));
   const updates: string[] = [];
   bridge.invoke.mockImplementation(async (command, args) => {
-    expect(command).toBe('claude_chat');
+    expect(command).toBe(`${agent}_chat`);
     expect(args.payload).toBe(claudePayload(request));
     expect(args.payload).not.toContain('alex@example.com');
     expect(args.repoPath).toBeUndefined();
     args.onEvent.onmessage({ type: 'started' });
     args.onEvent.onmessage({ type: 'delta', text: '{"text":"Check ' });
-    args.onEvent.onmessage({ type: 'delta', text: 'timeouts","blocks":[]}' });
+    args.onEvent.onmessage({ type: 'replace', text: '{"text":"Check timeouts","blocks":[]}' });
     return '{"text":"Check timeouts","blocks":[]}';
   });
-  const answer = await claudeProvider('').complete(request, new AbortController().signal, text => updates.push(streamingProse(text)));
+  const answer = await provider('').complete(request, new AbortController().signal, text => updates.push(streamingProse(text)));
   expect(updates).toEqual(['Check ', 'Check timeouts']);
   expect(JSON.parse(answer).text).toBe('Check timeouts');
 });
@@ -30,14 +31,14 @@ it('cancels even when Stop arrives before native startup acknowledgement', async
   const controller = new AbortController();
   let finish!: (value: string) => void;
   bridge.invoke.mockImplementation((command, args) => {
-    if (command === 'cancel_claude_chat') { finish('late answer'); return Promise.resolve(); }
+    if (command === 'cancel_agent_chat') { finish('late answer'); return Promise.resolve(); }
     const response = new Promise<string>(resolve => { finish = resolve; });
     controller.abort();
     args.onEvent.onmessage({ type: 'started' });
     return response;
   });
   await expect(claudeProvider('').complete({ messages: [], context: null }, controller.signal)).rejects.toThrow();
-  expect(bridge.invoke).toHaveBeenCalledWith('cancel_claude_chat', expect.objectContaining({ requestId: expect.any(String) }));
+  expect(bridge.invoke).toHaveBeenCalledWith('cancel_agent_chat', expect.objectContaining({ requestId: expect.any(String) }));
 });
 it('does not start aborted requests and never substitutes demo responses on bridge errors', async () => {
   const controller = new AbortController(); controller.abort();

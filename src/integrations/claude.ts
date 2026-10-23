@@ -5,11 +5,18 @@ export function claudePayload(request: ModelRequest): string {
   return JSON.stringify({ messages: hostedBody('', request).messages }, null, 2);
 }
 
-type ClaudeEvent = { type: 'started' } | { type: 'delta'; text: string };
+type ClaudeEvent = { type: 'started' } | { type: 'delta' | 'replace'; text: string };
 export function claudeProvider(executablePath: string): ModelProvider {
-  if (!isTauri()) throw new Error('Claude Code chat requires the Tauri desktop app. Browser mode supports local file review only.');
+  return cliProvider('claude', executablePath);
+}
+export function codexProvider(executablePath: string): ModelProvider {
+  return cliProvider('codex', executablePath);
+}
+function cliProvider(agent: 'claude' | 'codex', executablePath: string): ModelProvider {
+  const label = agent === 'codex' ? 'Codex' : 'Claude Code';
+  if (!isTauri()) throw new Error(`${label} chat requires the Tauri desktop app. Browser mode supports local file review only.`);
   return {
-    id: 'claude', label: 'Claude Code', mode: 'claude',
+    id: agent, label, mode: agent,
     async complete(request, signal, onText) {
       signal.throwIfAborted();
       const requestId = crypto.randomUUID();
@@ -18,16 +25,16 @@ export function claudeProvider(executablePath: string): ModelProvider {
       let finished = false;
       let text = '';
       const cancel = () => {
-        if (started && !finished) void invoke('cancel_claude_chat', { requestId }).catch(() => {});
+        if (started && !finished) void invoke('cancel_agent_chat', { requestId }).catch(() => {});
       };
       events.onmessage = event => {
         if (finished) return;
         if (event.type === 'started') { started = true; if (signal.aborted) cancel(); }
-        if (event.type === 'delta' && !signal.aborted) { text += event.text; onText?.(text); }
+        if ((event.type === 'delta' || event.type === 'replace') && !signal.aborted) { text = event.type === 'replace' ? event.text : text + event.text; onText?.(text); }
       };
       signal.addEventListener('abort', cancel, { once: true });
       try {
-        const result = await invoke<string>('claude_chat', { requestId, executablePath, payload: claudePayload(request), onEvent: events });
+        const result = await invoke<string>(`${agent}_chat`, { requestId, executablePath, payload: claudePayload(request), onEvent: events });
         signal.throwIfAborted();
         return result;
       } finally {

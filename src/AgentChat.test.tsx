@@ -17,14 +17,15 @@ const props = {
   hosted: { endpoint: '', model: '', token: '' }, servers: [], connections: {},
   mcp: new McpConnections(() => {}), onModelStatus: vi.fn(), onFiles: vi.fn(), onSettings: vi.fn(),
 };
-it('requires approval, streams prose above the composer, then renders generated OpenUI', async () => {
+it.each(['claude','codex'])('%s requires approval and renders generated OpenUI', async agent => {
   let finish!: (text: string) => void;
-  native.invoke.mockImplementation((_command, args) => {
+  native.invoke.mockImplementation((command, args) => {
+    expect(command).toBe(`${agent}_chat`);
     args.onEvent.onmessage({ type: 'started' });
     args.onEvent.onmessage({ type: 'delta', text: '{"text":"Two timeouts found' });
     return new Promise(resolve => { finish = resolve; });
   });
-  const user = userEvent.setup(); render(<AgentChat {...props}/>);
+  const user = userEvent.setup(); render(<AgentChat {...props} mode={agent}/>);
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Investigate alex@example.com{Enter}');
   const review = screen.getByRole('dialog');
   expect(review.textContent).toContain('Reviewed evidence: 2 timeouts');
@@ -44,7 +45,7 @@ it('requires approval, streams prose above the composer, then renders generated 
 it('cancels a native request when its session becomes inactive', async () => {
   let reject!: (error: Error) => void;
   native.invoke.mockImplementation((command, args) => {
-    if (command === 'cancel_claude_chat') { reject(new Error('Request cancelled')); return Promise.resolve(); }
+    if (command === 'cancel_agent_chat') { reject(new Error('Request cancelled')); return Promise.resolve(); }
     args.onEvent.onmessage({ type: 'started' });
     return new Promise((_resolve, fail) => { reject = fail; });
   });
@@ -52,5 +53,16 @@ it('cancels a native request when its session becomes inactive', async () => {
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Debug this{Enter}');
   await user.click(screen.getByRole('button', { name: 'Approve and send' }));
   await act(async () => view.rerender(<AgentChat {...props} active={false}/>));
-  expect(native.invoke).toHaveBeenCalledWith('cancel_claude_chat', expect.objectContaining({ requestId: expect.any(String) }));
+  expect(native.invoke).toHaveBeenCalledWith('cancel_agent_chat', expect.objectContaining({ requestId: expect.any(String) }));
+});
+
+it('switching providers revokes pending approval without sending', async () => {
+  const user=userEvent.setup(); const view=render(<AgentChat {...props}/>);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Check timeouts{Enter}');
+  expect(screen.getByRole('dialog').textContent).toContain('Claude Code CLI');
+  view.rerender(<AgentChat {...props} mode="codex" codexPath="/usr/local/bin/codex"/>);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(native.invoke).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button',{name:'Send'}));
+  expect(screen.getByRole('dialog').textContent).toContain('Codex CLI');
 });

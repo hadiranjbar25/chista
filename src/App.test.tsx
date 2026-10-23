@@ -27,7 +27,19 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByRole('button',{name:'Agent settings'}));
     const selector=screen.getByLabelText('Active agent') as HTMLSelectElement;
     expect(selector.value).toBe('claude');
-    expect(Array.from(selector.options).map(o=>o.value)).toEqual(['claude','hosted']);
+    expect(Array.from(selector.options).map(o=>o.value)).toEqual(['claude','codex','hosted']);
+  });
+  it('switches between Claude and Codex from chat and Settings',async()=>{
+    const user=userEvent.setup();render(<App/>);
+    await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Investigate timeouts');
+    await user.selectOptions(screen.getByRole('combobox',{name:'Chat agent'}),'codex');
+    expect(screen.getByText('Codex · CLI chat')).toBeTruthy();
+    expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Investigate timeouts');
+    await user.click(screen.getByRole('button',{name:'Agent settings'}));
+    expect((screen.getByLabelText('Active agent') as HTMLSelectElement).value).toBe('codex');
+    await user.selectOptions(screen.getByLabelText('Active agent'),'claude');
+    await user.click(screen.getByRole('button',{name:'Back to chat'}));
+    expect((screen.getByRole('combobox',{name:'Chat agent'}) as HTMLSelectElement).value).toBe('claude');
   });
   it('keeps artifacts, mappings and conversation scoped to independent sessions',async()=>{
     const user=userEvent.setup();render(<App/>);

@@ -8,7 +8,10 @@ pub fn run() {
             claude::claude_status,
             claude::launch_claude,
             claude::claude_chat,
-            claude::cancel_claude_chat
+            claude::cancel_agent_chat,
+            claude::codex_status,
+            claude::launch_codex,
+            claude::codex_chat
         ])
         .run(tauri::generate_context!())
         .expect("error while running Chista");

@@ -6,7 +6,7 @@ export type ModelRequest = { messages: Message[]; context: string | null };
 export interface ModelProvider {
   id: string;
   label: string;
-  mode: 'hosted' | 'claude';
+  mode: 'hosted' | 'claude' | 'codex';
   complete(request: ModelRequest, signal: AbortSignal, onText?: (text: string) => void): Promise<string>;
 }
 export type HostedConfig = { endpoint: string; model: string; token: string };

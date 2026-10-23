@@ -8,7 +8,7 @@ The sidebar contains recent sessions. Settings lives in the top right. Repo sele
 
 Redaction happens locally. AI analysis runs through your configured hosted provider or Claude Code. Chista does not run or download a local model.
 
-> Live agent connections require the Tauri desktop app and your configured Claude CLI or hosted provider. Browser mode supports local file review only. No sample incidents, scripted answers or demo provider are included. See [validation and current blockers](#validation-and-current-blockers).
+> Live agent connections require the Tauri desktop app and your configured Claude Code CLI, Codex CLI or hosted provider. Browser mode supports local file review only. No sample incidents, scripted answers or demo provider are included. See [validation and current blockers](#validation-and-current-blockers).
 
 ## How it works
 
@@ -93,7 +93,7 @@ Start with your own question or import debug files. There are no preloaded incid
 ## Everyday flow
 
 1. **Start a session.** The conversation opens immediately with a text box at the bottom.
-2. **Chat.** Press Enter or Send; use Shift+Enter for a new line. Review and approve the outgoing message to send it to Claude Code or your configured hosted provider.
+2. **Chat.** Press Enter or Send; use Shift+Enter for a new line. Review and approve the outgoing message to send it to the selected Claude Code, Codex or hosted provider.
 3. **Add context when needed.** Use **Repos** to include one or more registered checkouts. Use **Files & mappings** or **Add files** to import, mask and review debug data.
 4. **Explore the response.** The agent can combine text with OpenUI charts, searchable tables and follow-up buttons. A follow-up fills the composer so you can edit it before sending.
 
@@ -104,7 +104,7 @@ Repositories form a shared catalog; sessions are independent investigations. One
 | **New session / recent sessions** | Start or return to a conversation with isolated artifacts, mappings and history. |
 | **Repos → Manage repos** | Register existing checkouts and choose which ones a session includes. |
 | **Files & mappings** | Import, mask and inspect artifacts before handing sanitized context to the agent. |
-| **Top-right Settings → Models** | Choose Claude Code in-app chat or a hosted chat provider. |
+| **Top-right Settings → Models** | Choose Claude Code, Codex or a hosted chat provider. |
 | **Settings → MCP** | Configure servers and discover tools; tool controls stay hidden in chat until a server is connected. |
 | **Settings → General** | Review data handling and clear saved repository metadata. |
 
@@ -130,10 +130,23 @@ Sanitization detects common secret/PII patterns and sensitive structured fields.
 
 | Option | How context reaches it | Setup |
 | --- | --- | --- |
+| **Codex** | Review sanitized context and receive text plus OpenUI results in chat. | Installed Codex CLI with native sign-in. |
 | **Claude Code** | Review and send sanitized context; receive streamed prose and OpenUI results in chat. | Use your installed CLI; sign in through Claude’s own terminal flow. |
 | **Hosted provider** | Approve the exact outgoing request in session chat. | Configure an HTTPS chat-completions endpoint, model and optional API token. |
 
 The app starts with Claude Code selected. Selecting an integration does not send data or prove that it is connected.
+
+### Switch agents
+
+Use **Chat agent** beside the composer to switch between Claude Code and Codex without leaving your session. **Settings → Models → Active agent** controls the same selection and also offers a configured hosted provider. Switching cancels any active CLI request and revokes pending approval. Your conversation stays in the session; the next preview includes the sanitized history and explicitly names its new destination.
+
+### Codex
+
+Select **Codex** and check installation in Settings → Models. Detection checks PATH, common CLI locations and macOS VS Code extension binaries; an absolute executable override is also available. Expand **Codex · sign-in & terminal** to launch its native terminal in an included repository and complete sign-in there. Chista never collects Codex credentials.
+
+In-app requests use `codex exec --json` in an empty temporary directory and reuse native authentication. The CLI emits completed agent messages, which Chista renders as text and validated OpenUI blocks; it does not mirror the terminal or assume token-by-token events. The CLI’s default cloud model is used. Shell/image/browser/computer tools, user configuration, hooks, plugins, apps, MCP, project instructions and memory injection are disabled; execution is ephemeral with a restricted filesystem profile and no command network access. Only approved sanitized strings go over stdin. MCP calls remain separately approved in Chista. A recent CLI supporting these flags is required; unsupported configurations fail without weaker retries.
+
+References: [official non-interactive CLI documentation](https://developers.openai.com/codex/noninteractive), [configuration reference](https://developers.openai.com/codex/config-reference).
 
 ### Claude Code
 
@@ -170,8 +183,10 @@ Raw files, original filenames, placeholder mappings, custom terms, chat history 
 
 ## Validation and current blockers
 
-The 29 frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
+The frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
 
-Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and seven Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
+Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and ten Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
+
+The installed Codex CLI was verified against a localhost mock Responses endpoint with a synthetic prompt; no debug data was sent to an AI service. The CLI exposed no shell, file, or MCP tools in that test. Live cloud authentication and generation are not verified.
 
 The Claude executable was not found at the checked installation paths, so live sign-in and cloud generation remain unverified. Install/configure a recent CLI and run a desktop smoke test with sanitized sample context. Live hosted-provider and MCP credentials were not provided; those transports are tested with mocks. Local file review needs no credentials. Test fixtures are not bundled into the application.
