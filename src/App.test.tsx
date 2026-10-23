@@ -16,6 +16,22 @@ describe('conversation workspace',()=>{
     expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('How do I add debug context?');
     expect(screen.getAllByText(/Demo response — no model was contacted/)).toHaveLength(1);
   });
+  it('runs the page-load demo in one click and supports a follow-up investigation',async()=>{
+    const user=userEvent.setup();render(<App/>);
+    await user.click(screen.getByRole('button',{name:'Debug this issue'}));
+    const conversation=screen.getByRole('log',{name:'Conversation'});
+    expect(conversation.textContent).toContain('2 of 5 sampled requests failed (40%)');
+    expect(screen.getByRole('heading',{name:'Request latency vs timeout (ms)'})).toBeTruthy();
+    expect(screen.getByRole('heading',{name:'Request evidence'})).toBeTruthy();
+    expect(conversation.textContent).not.toContain('alex@example.com');
+    expect(conversation.textContent).not.toContain('sk-demoSecret123456');
+    await user.click(screen.getByRole('button',{name:/Show the latency breakdown/}));
+    await user.click(screen.getByRole('button',{name:'Send'}));
+    expect(await screen.findByText(/Latency breakdown: 2 of 5/)).toBeTruthy();
+    await user.click(screen.getByRole('button',{name:'Files & mappings'}));
+    await user.click(screen.getByRole('button',{name:'Mappings'}));
+    expect(within(screen.getByRole('region',{name:'Local redaction mappings'})).getByText('alex@example.com')).toBeTruthy();
+  });
   it('keeps artifacts, mappings and conversation scoped to independent sessions',async()=>{
     const user=userEvent.setup();render(<App/>);
     await user.click(screen.getByRole('button',{name:'Files & mappings'}));
@@ -45,9 +61,9 @@ describe('conversation workspace',()=>{
     await user.click(within(preview).getByRole('checkbox'));
     await user.click(within(preview).getByRole('button',{name:'Attach to session chat'}));
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Show patterns{Enter}');
-    expect(await screen.findByRole('heading',{name:'Log levels in reviewed context'})).toBeTruthy();
-    expect(screen.getByRole('heading',{name:'Reviewed evidence'})).toBeTruthy();
-    expect(screen.getByLabelText('Conversation').textContent).not.toContain('alex@example.com');
+    expect(await screen.findByRole('heading',{name:'Request latency vs timeout (ms)'})).toBeTruthy();
+    expect(screen.getByRole('heading',{name:'Request evidence'})).toBeTruthy();
+    expect(screen.getByRole('log',{name:'Conversation'}).textContent).not.toContain('alex@example.com');
     await user.click(screen.getByRole('button',{name:'Files & mappings'}));
     await user.click(screen.getByRole('button',{name:'Remove requests.csv'}));
     await user.click(screen.getByRole('button',{name:'Back to chat'}));

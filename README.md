@@ -84,6 +84,14 @@ npm run tauri build
 
 Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) separately. No local model, Ollama, model download or inference server is used.
 
+## Try the working demo
+
+Run `npm run dev` and open **http://127.0.0.1:1420**. Click **Debug this issue** on the opening screen. There is no account, model setup or upload step.
+
+Chista creates a separate fictional checkout incident, sanitizes the included log/CSV/JSON artifacts, and shows a result: 2 of 5 requests failed, with failed latencies exceeding the 2-second timeout. The response includes a latency chart, a searchable request table, a qualified hypothesis and next investigation steps. Choose a follow-up, then press Send to explore the latency or evidence. **Files & mappings** shows the sample artifacts and their local masking map.
+
+The demo is a deterministic simulation, not a live model. It calculates findings from the sample data and does not claim that a root cause has been proven. Your own imported files still require explicit review before sharing with a hosted agent.
+
 ## Everyday flow
 
 1. **Start a session.** The conversation opens immediately with a text box at the bottom.
@@ -162,6 +170,6 @@ Raw files, original filenames, placeholder mappings, custom terms, chat history 
 
 ## Validation and current blockers
 
-The 24 frontend tests cover text and generated OpenUI replies, the sanitizer, repository membership/migration, and session isolation, navigation preservation, reviewed-context revocation, chat preview, exact provider payloads, one-time tool approval, and SDK initialization/discovery/call/disconnect against a mock HTTP transport. `npm run build` verifies TypeScript and bundles the frontend.
+The 27 frontend tests cover text and generated OpenUI replies, the sanitizer, repository membership/migration, and session isolation, navigation preservation, reviewed-context revocation, chat preview, exact provider payloads, one-time tool approval, and SDK initialization/discovery/call/disconnect against a mock HTTP transport. `npm run build` verifies TypeScript and bundles the frontend.
 
 Native compilation and Rust launcher tests require Rust/Cargo, which were unavailable in the implementation environment. The Claude binary was not visible on PATH or at common install paths there; the executable override supports installations outside those paths. Live model/MCP credentials were not provided, so protocol behavior was tested with fixtures, not a real external service. Native terminal launch and the Tauri HTTP bridge still need a desktop smoke test after installing the toolchain.

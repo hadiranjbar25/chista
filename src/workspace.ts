@@ -1,5 +1,5 @@
 export type Repository = { id: string; name: string; path: string };
-export type Session = { id: string; repoIds: string[]; name: string };
+export type Session = { id: string; repoIds: string[]; demo?: boolean; name: string };
 export const newSession = (name: string): Session => ({ id: crypto.randomUUID(), repoIds: [], name });
 export function sessionRepositories(session: Session, repositories: Repository[]) {
   return repositories.filter(repo => session.repoIds.includes(repo.id));

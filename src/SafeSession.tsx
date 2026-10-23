@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity, ArrowRight, Check, CheckCheck, ChevronRight, FileCode2, FileText, Files, FlaskConical, FolderOpen, GitCompareArrows, LockKeyhole, Plus, ShieldCheck, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { Artifact, compact, samples, Sanitizer, sanitizeArtifacts } from './safety';
+import { demoArtifacts } from './demo';
 import DebugView from './DebugView';
 import RedactionMappings from './RedactionMappings';
 const tabs = ['Overview', 'Redaction review', 'Mappings', 'Compare artifacts', 'Debug workspace'];
-export default function SafeSession({ onContext, onOpenChat, artifactView = false }: { onContext: (context: string | null) => void; onOpenChat?: () => void; artifactView?: boolean }) {
+export default function SafeSession({ onContext, onOpenChat, demoOnStart = false, artifactView = false }: { onContext: (context: string | null) => void; onOpenChat?: () => void; artifactView?: boolean; demoOnStart?: boolean }) {
   useEffect(() => { if (artifactView) setTab('Overview'); }, [artifactView]);
   const sanitizer = useRef(new Sanitizer()); const input = useRef<HTMLInputElement>(null);
-  const [files, setFiles] = useState<Artifact[]>([]); const [tab, setTab] = useState('Overview'); const [active, setActive] = useState('');
+  const [files, setFiles] = useState<Artifact[]>(()=>demoOnStart ? demoArtifacts(sanitizer.current) : []); const [tab, setTab] = useState('Overview'); const [active, setActive] = useState('');
   const [terms, setTerms] = useState(''); const [notice, setNotice] = useState(''); const [error, setError] = useState('');
   const [raw, setRaw] = useState(false); const [preview, setPreview] = useState<string|null>(null); const [approved, setApproved] = useState(false);
   const [budget, setBudget] = useState(6000); const [pair, setPair] = useState<string[]>([]); const [busy, setBusy] = useState(false);
