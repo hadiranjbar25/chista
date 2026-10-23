@@ -9,6 +9,6 @@ export function endpoint(value: string, allowLoopback = false): URL {
   return url;
 }
 export const desktopFetch: typeof fetch = async (input, init) => {
-  if (!isTauri()) throw new Error('Live connections require the Tauri desktop app. Browser preview is demo only.');
+  if (!isTauri()) throw new Error('Live connections require the Tauri desktop app. Browser mode supports local file review only.');
   return nativeFetch(input, { ...init, maxRedirections: 0, connectTimeout: 15_000 });
 };

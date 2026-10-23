@@ -15,7 +15,7 @@ const props = {
   repositories: [], session: { id: 'session', name: 'Investigation', repoIds: [] },
   context: 'Reviewed evidence: 2 timeouts', mode: 'claude', claudePath: '',
   hosted: { endpoint: '', model: '', token: '' }, servers: [], connections: {},
-  mcp: new McpConnections(() => {}), onModelStatus: vi.fn(), onFiles: vi.fn(), onSettings: vi.fn(), onRunDemo: vi.fn(),
+  mcp: new McpConnections(() => {}), onModelStatus: vi.fn(), onFiles: vi.fn(), onSettings: vi.fn(),
 };
 it('requires approval, streams prose above the composer, then renders generated OpenUI', async () => {
   let finish!: (text: string) => void;

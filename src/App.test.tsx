@@ -3,39 +3,36 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
+import { samples } from './test-fixtures';
 beforeEach(()=>localStorage.clear());afterEach(cleanup);
+async function importEvidence(user: ReturnType<typeof userEvent.setup>) {
+  const files=samples.map(sample=>{
+    const file=new File([sample.raw],sample.name,{type:'text/plain'});
+    Object.defineProperty(file,'text',{value:async()=>sample.raw});
+    return file;
+  });
+  await user.upload(screen.getByLabelText('Import debug files'),files);
+  expect(await screen.findByText('3 artifact(s) imported and sanitized locally.')).toBeTruthy();
+}
 const repos=[{id:'api',name:'API',path:'/repos/api'},{id:'web',name:'Web',path:'/repos/web'}];
 describe('conversation workspace',()=>{
-  it('opens on a composer and renders a demo answer with OpenUI followups above it',async()=>{
+  it('opens a real chat with no demo controls and explains desktop requirements',async()=>{
     const user=userEvent.setup();render(<App/>);
+    expect(screen.getByRole('heading',{name:'What are you debugging?'})).toBeTruthy();
     expect(screen.getByRole('button',{name:'Settings'}).closest('header')).toBeTruthy();
-    expect(screen.queryByRole('button',{name:'Models'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'Debug this issue'})).toBeNull();
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Help me investigate{Enter}');
-    expect(await screen.findByText(/Demo response — no model was contacted/)).toBeTruthy();
-    await user.click(screen.getByRole('button',{name:/How do I add debug context/}));
-    expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('How do I add debug context?');
-    expect(screen.getAllByText(/Demo response — no model was contacted/)).toHaveLength(1);
-  });
-  it('runs the page-load demo in one click and supports a follow-up investigation',async()=>{
-    const user=userEvent.setup();render(<App/>);
-    await user.click(screen.getByRole('button',{name:'Debug this issue'}));
-    const conversation=screen.getByRole('log',{name:'Conversation'});
-    expect(conversation.textContent).toContain('2 of 5 sampled requests failed (40%)');
-    expect(screen.getByRole('heading',{name:'Request latency vs timeout (ms)'})).toBeTruthy();
-    expect(screen.getByRole('heading',{name:'Request evidence'})).toBeTruthy();
-    expect(conversation.textContent).not.toContain('alex@example.com');
-    expect(conversation.textContent).not.toContain('sk-demoSecret123456');
-    await user.click(screen.getByRole('button',{name:/Show the latency breakdown/}));
-    await user.click(screen.getByRole('button',{name:'Send'}));
-    expect(await screen.findByText(/Latency breakdown: 2 of 5/)).toBeTruthy();
-    await user.click(screen.getByRole('button',{name:'Files & mappings'}));
-    await user.click(screen.getByRole('button',{name:'Mappings'}));
-    expect(within(screen.getByRole('region',{name:'Local redaction mappings'})).getByText('alex@example.com')).toBeTruthy();
+    expect(await screen.findByText(/Claude Code chat requires the Tauri desktop app/)).toBeTruthy();
+    expect(screen.getByRole('log').querySelectorAll('.message')).toHaveLength(0);
+    await user.click(screen.getByRole('button',{name:'Agent settings'}));
+    const selector=screen.getByLabelText('Active agent') as HTMLSelectElement;
+    expect(selector.value).toBe('claude');
+    expect(Array.from(selector.options).map(o=>o.value)).toEqual(['claude','hosted']);
   });
   it('keeps artifacts, mappings and conversation scoped to independent sessions',async()=>{
     const user=userEvent.setup();render(<App/>);
     await user.click(screen.getByRole('button',{name:'Files & mappings'}));
-    await user.click(screen.getByRole('button',{name:'Load sample session'}));
+    await importEvidence(user);
     await user.click(screen.getByRole('button',{name:'Mappings'}));
     const mapping=screen.getByRole('region',{name:'Local redaction mappings'});
     expect(within(mapping).getByText('alex@example.com')).toBeTruthy();
@@ -50,19 +47,17 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByRole('button',{name:'Debug session 1'}));
     expect(screen.getByRole('region',{name:'Local redaction mappings'})).toBeTruthy();
   });
-  it('hands off only a reviewed snapshot and generates chart/table UI from it',async()=>{
+  it('hands off only a reviewed snapshot and revokes it when evidence changes',async()=>{
     const user=userEvent.setup();render(<App/>);
     await user.click(screen.getByRole('button',{name:'Files & mappings'}));
-    await user.click(screen.getByRole('button',{name:'Load sample session'}));
+    await importEvidence(user);
     await user.click(screen.getByRole('button',{name:'Prepare context'}));
     const preview=screen.getByRole('dialog',{name:'Review context before export'});
     expect(preview.textContent).not.toContain('alex@example.com');
     expect((within(preview).getByRole('button',{name:'Attach to session chat'}) as HTMLButtonElement).disabled).toBe(true);
     await user.click(within(preview).getByRole('checkbox'));
     await user.click(within(preview).getByRole('button',{name:'Attach to session chat'}));
-    await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Show patterns{Enter}');
-    expect(await screen.findByRole('heading',{name:'Request latency vs timeout (ms)'})).toBeTruthy();
-    expect(screen.getByRole('heading',{name:'Request evidence'})).toBeTruthy();
+    expect(screen.getByRole('button',{name:/characters of reviewed context attached/})).toBeTruthy();
     expect(screen.getByRole('log',{name:'Conversation'}).textContent).not.toContain('alex@example.com');
     await user.click(screen.getByRole('button',{name:'Files & mappings'}));
     await user.click(screen.getByRole('button',{name:'Remove requests.csv'}));

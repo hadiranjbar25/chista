@@ -1,4 +1,3 @@
-import { buildDemoReply } from '../demo';
 import { desktopFetch, endpoint } from './transport';
 import { uiInstructions } from '../AgentResponse';
 import { Sanitizer } from '../safety';
@@ -7,16 +6,10 @@ export type ModelRequest = { messages: Message[]; context: string | null };
 export interface ModelProvider {
   id: string;
   label: string;
-  mode: 'demo' | 'hosted' | 'claude';
+  mode: 'hosted' | 'claude';
   complete(request: ModelRequest, signal: AbortSignal, onText?: (text: string) => void): Promise<string>;
 }
 export type HostedConfig = { endpoint: string; model: string; token: string };
-export const demoProvider: ModelProvider = {
-  id: 'demo', label: 'Demo assistant', mode: 'demo',
-  async complete(request) {
-    return buildDemoReply(request.messages.at(-1)?.content??'',request.context);
-  },
-};
 export function hostedProvider(config: HostedConfig, send: typeof fetch = desktopFetch): ModelProvider {
   const url = endpoint(config.endpoint).href;
   if (!config.model.trim()) throw new Error('Enter the hosted model identifier.');

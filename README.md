@@ -8,7 +8,7 @@ The sidebar contains recent sessions. Settings lives in the top right. Repo sele
 
 Redaction happens locally. AI analysis runs through your configured hosted provider or Claude Code. Chista does not run or download a local model.
 
-> **MVP status:** Safe Debug Sessions and the browser demo work without an agent connection. Live integrations require the Tauri desktop app. Native builds and real-service integration checks remain unverified in the development environment; see [validation and current blockers](#validation-and-current-blockers).
+> Live agent connections require the Tauri desktop app and your configured Claude CLI or hosted provider. Browser mode supports local file review only. No sample incidents, scripted answers or demo provider are included. See [validation and current blockers](#validation-and-current-blockers).
 
 ## How it works
 
@@ -84,18 +84,16 @@ npm run tauri build
 
 Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) separately. No local model, Ollama, model download or inference server is used.
 
-## Try the working demo
+## Connect your agent
 
-Run `npm run dev` and open **http://127.0.0.1:1420**. Click **Debug this issue** on the opening screen. There is no account, model setup or upload step.
+Open the desktop app. Claude Code is selected by default. In **Settings → Models**, check its installation or provide the executable path. Complete sign-in in Claude’s native terminal flow. Alternatively configure a hosted provider. Installation detection does not verify authentication; the first approved request verifies access.
 
-Chista creates a separate fictional checkout incident, sanitizes the included log/CSV/JSON artifacts, and shows a result: 2 of 5 requests failed, with failed latencies exceeding the 2-second timeout. The response includes a latency chart, a searchable request table, a qualified hypothesis and next investigation steps. Choose a follow-up, then press Send to explore the latency or evidence. **Files & mappings** shows the sample artifacts and their local masking map.
-
-The demo is a deterministic simulation, not a live model. It calculates findings from the sample data and does not claim that a root cause has been proven. Your own imported files still require explicit review before sharing with a hosted agent.
+Start with your own question or import debug files. There are no preloaded incidents or simulated answers. Connection failures stay visible and never switch to a scripted provider.
 
 ## Everyday flow
 
 1. **Start a session.** The conversation opens immediately with a text box at the bottom.
-2. **Chat.** Press Enter or Send; use Shift+Enter for a new line. Demo responses are explicitly labeled. Choose a hosted provider in the top-right Settings for real AI answers.
+2. **Chat.** Press Enter or Send; use Shift+Enter for a new line. Review and approve the outgoing message to send it to Claude Code or your configured hosted provider.
 3. **Add context when needed.** Use **Repos** to include one or more registered checkouts. Use **Files & mappings** or **Add files** to import, mask and review debug data.
 4. **Explore the response.** The agent can combine text with OpenUI charts, searchable tables and follow-up buttons. A follow-up fills the composer so you can edit it before sending.
 
@@ -106,7 +104,7 @@ Repositories form a shared catalog; sessions are independent investigations. One
 | **New session / recent sessions** | Start or return to a conversation with isolated artifacts, mappings and history. |
 | **Repos → Manage repos** | Register existing checkouts and choose which ones a session includes. |
 | **Files & mappings** | Import, mask and inspect artifacts before handing sanitized context to the agent. |
-| **Top-right Settings → Models** | Choose a hosted chat provider, demo mode or the Claude Code in-app chat. |
+| **Top-right Settings → Models** | Choose Claude Code in-app chat or a hosted chat provider. |
 | **Settings → MCP** | Configure servers and discover tools; tool controls stay hidden in chat until a server is connected. |
 | **Settings → General** | Review data handling and clear saved repository metadata. |
 
@@ -116,11 +114,11 @@ Only repository names and directory paths survive app restarts. Previously saved
 
 Hosted agents receive a response contract for text plus optional chart, table and follow-up blocks. Chista validates those blocks and renders them through an allowlisted OpenUI component library. It does not execute model-provided JavaScript, HTML, network requests or tool calls. Invalid structured replies fall back to escaped text.
 
-Charts support selecting categories, tables support searching, and follow-ups populate the composer. Plain-text responses work too. Demo mode builds example widgets from the attached sanitized context; it does not pretend to be a connected model. To try it, open **Files & mappings**, load the sample session, prepare and attach reviewed context, then ask “Show patterns.”
+Charts support selecting categories, tables support searching, and follow-ups populate the composer. Plain-text responses work too. Charts and tables use the agent’s structured reply; local evidence views use only your imported sanitized artifacts.
 
 ## Safe Debug Sessions
 
-1. Import header-based CSV, JSON, LOG or TXT; up to 20 artifacts, 2 MB each. Fictional sample data is available.
+1. Import header-based CSV, JSON, LOG or TXT; up to 20 artifacts, 2 MB each.
 2. Preview local redactions, optionally reveal originals locally, and add exact custom sensitive values. Consistent placeholders preserve relationships across artifacts. The **Mappings** tab shows original → placeholder pairs, occurrence counts and source artifacts. Search the mapping or hide originals on screen. The mapping stays in the session on this device and is never included in model requests, context exports or the Claude copy action.
 3. Compare sanitized artifacts by line position. OpenUI renders interactive severity charts, searchable evidence tables and follow-up controls (500 analyzed lines, 100 displayed matching rows).
 4. Select artifacts, compact them, and review the exact JSON snapshot. Duplicate lines are removed; the content budget truncates excerpts and reports omitted characters.
@@ -134,28 +132,27 @@ Sanitization detects common secret/PII patterns and sensitive structured fields.
 | --- | --- | --- |
 | **Claude Code** | Review and send sanitized context; receive streamed prose and OpenUI results in chat. | Use your installed CLI; sign in through Claude’s own terminal flow. |
 | **Hosted provider** | Approve the exact outgoing request in session chat. | Configure an HTTPS chat-completions endpoint, model and optional API token. |
-| **Demo assistant** | Nothing leaves the device; responses are scripted workflow suggestions. | No connection required. |
 
-The app starts in demo mode. Selecting an integration does not send data or prove that it is connected.
+The app starts with Claude Code selected. Selecting an integration does not send data or prove that it is connected.
 
 ### Claude Code
 
 1. Run the Tauri desktop app and select **Settings → Models → Claude Code**. Check installation or enter an absolute executable path.
 2. If sign-in is needed, expand **Claude Code · sign-in & terminal** in chat, choose an included repository and launch the native terminal. Complete Claude’s own sign-in flow there. Chista never asks for Claude credentials.
 3. Type a message, review the exact sanitized conversation payload and approve it. Text streams above the composer; validated structured responses render as interactive OpenUI charts, tables and follow-up controls. Plain-text answers also work.
-4. **Stop**, switching sessions or closing chat cancels the request. Failed requests are not automatically retried or replaced with demo results.
+4. **Stop**, switching sessions or closing chat cancels the request. Failed requests are not automatically retried or replaced with scripted results.
 
 The bridge launches `claude -p` with streaming JSON through a narrow Tauri command. The payload goes over stdin, not shell arguments. Every request uses an empty temporary working directory, safe mode, no built-in or MCP tools, disabled hooks, and no CLI session persistence. Chista sends sanitized conversation history on each turn rather than resuming a potentially unsafe CLI session. Repository files and local redaction mappings are not part of the request. This is evidence-only debugging; autonomous repository edits are not enabled. MCP tools remain separately approved in Chista.
 
 A recent Claude Code CLI supporting `--safe-mode` is required. Unsupported flags or missing authentication produce an error; Chista never retries with weaker restrictions. Existing CLI authentication and provider configuration determine the cloud destination. Managed enterprise policies still apply. See the [official CLI reference](https://code.claude.com/docs/en/cli-reference).
 
-The optional external terminal is separate: it launches Claude in an included repository with its native file permissions and does not stream into Chista. macOS and Linux terminal launch are supported; Windows terminal launch is not implemented. Browser preview remains demo-only for Claude integration.
+The optional external terminal is separate: it launches Claude in an included repository with its native file permissions and does not stream into Chista. macOS and Linux terminal launch are supported; Windows terminal launch is not implemented. Browser mode supports local file review; Claude chat requires desktop.
 
 ### Hosted model providers
 
 `src/integrations/providers.ts` defines `ModelProvider`, `ModelRequest` and the provider implementations. The optional hosted adapter accepts an HTTPS chat-completions endpoint, a model identifier and optional API bearer token. It sends `{ model, stream: false, messages }` and expects `choices[0].message.content`. This is a compatible-endpoint adapter, not a universal adapter for every vendor API. Add another implementation of `ModelProvider` for a different protocol.
 
-For hosted providers, the exact JSON body, including instructions, sanitized history and reviewed context, is previewed before each send. Demo messages run immediately without a network request. Structured UI follows the response contract in `src/AgentResponse.tsx`. No tool execution is delegated to model responses. Tokens/configuration remain in memory. Requests have cancellation and a 60-second timeout. Status distinguishes configured, connecting, last-successful and failed states. There are no background model calls. Browser preview blocks live network integrations and supports the labeled demo assistant.
+For hosted providers, the exact JSON body, including instructions, sanitized history and reviewed context, is previewed before each send. Structured UI follows the response contract in `src/AgentResponse.tsx`. No tool execution is delegated to model responses. Tokens/configuration remain in memory. Requests have cancellation and a 125-second UI timeout (the Claude subprocess has a 120-second limit). Status distinguishes configured, connecting, last-successful and failed states. There are no background model calls. Browser preview blocks live network integrations and supports local file review only.
 
 ## MCP tools
 
@@ -173,8 +170,8 @@ Raw files, original filenames, placeholder mappings, custom terms, chat history 
 
 ## Validation and current blockers
 
-The 33 frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
+The 29 frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
 
 Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and seven Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
 
-The Claude executable was not found at the checked installation paths, so live sign-in and cloud generation remain unverified. Install/configure a recent CLI and run a desktop smoke test with sanitized sample context. Live hosted-provider and MCP credentials were not provided; those transports are tested with mocks. Browser demo mode needs no credentials.
+The Claude executable was not found at the checked installation paths, so live sign-in and cloud generation remain unverified. Install/configure a recent CLI and run a desktop smoke test with sanitized sample context. Live hosted-provider and MCP credentials were not provided; those transports are tested with mocks. Local file review needs no credentials. Test fixtures are not bundled into the application.

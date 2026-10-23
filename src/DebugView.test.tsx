@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import DebugView from './DebugView';
-import { sanitizeArtifacts, Sanitizer, samples } from './safety';
+import { sanitizeArtifacts, Sanitizer } from './safety';
+import { samples } from './test-fixtures';
 describe('OpenUI evidence rendering', () => {
  it('renders its chart, evidence table and follow-up controls from sanitized content', () => {
   const files = sanitizeArtifacts(samples.map((f,i) => ({...f,id:String(i),safe:'',redactions:0,selected:true})),new Sanitizer(),[]);

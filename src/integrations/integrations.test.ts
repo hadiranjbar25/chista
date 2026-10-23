@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Sanitizer } from '../safety';
 import { endpoint } from './transport';
-import { demoProvider, hostedBody, hostedProvider, prepareRequest } from './providers';
+import { hostedBody, hostedProvider, prepareRequest } from './providers';
 import { ApprovalGate, McpConnections, type ConnectionState, type ToolRequest } from './mcp';
 const request: ToolRequest = {serverId:'server',sessionId:'one',tool:'lookup',arguments:{id:'42'}};
 describe('outgoing integration boundaries', () => {
@@ -22,7 +22,6 @@ describe('outgoing integration boundaries', () => {
     const body = String(send.mock.calls[0][1]?.body);
     expect(JSON.parse(body)).toEqual(hostedBody(config.model,prepared));expect(body).not.toContain('alex@example.com');expect(body).not.toContain('secret123');expect(body).not.toContain('memory-token');expect(body).not.toContain('projectPath');
   });
-  it('demo performs no network operation and identifies itself', async () => {expect(await demoProvider.complete({messages:[],context:null},new AbortController().signal)).toContain('Demo response');});
   it('surfaces hosted failures without echoing remote response secrets', async () => {
     const provider = hostedProvider({endpoint:'https://host.example/chat',model:'x',token:''},vi.fn<typeof fetch>().mockResolvedValue(new Response('sensitive server text',{status:401})));
     await expect(provider.complete({messages:[],context:null},new AbortController().signal)).rejects.toThrow('HTTP 401');

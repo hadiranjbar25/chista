@@ -7,7 +7,7 @@ export function claudePayload(request: ModelRequest): string {
 
 type ClaudeEvent = { type: 'started' } | { type: 'delta'; text: string };
 export function claudeProvider(executablePath: string): ModelProvider {
-  if (!isTauri()) throw new Error('Claude Code chat requires the Tauri desktop app. Browser preview supports demo mode.');
+  if (!isTauri()) throw new Error('Claude Code chat requires the Tauri desktop app. Browser mode supports local file review only.');
   return {
     id: 'claude', label: 'Claude Code', mode: 'claude',
     async complete(request, signal, onText) {
