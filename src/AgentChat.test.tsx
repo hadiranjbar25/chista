@@ -82,3 +82,21 @@ it('offers native sign-in without a repository and preserves a failed draft for 
   const body=JSON.parse(screen.getByRole('dialog').querySelector('pre')!.textContent!);
   expect(body.messages.filter((m:{content:string})=>m.content==='Check this timeout')).toHaveLength(1);
 });
+
+it('renders successive live chunks while the native request is still pending',async()=>{
+  let emit!: (event:unknown)=>void;
+  let finish!: (text:string)=>void;
+  native.invoke.mockImplementation((_command,args)=>{emit=args.onEvent.onmessage;return new Promise(resolve=>{finish=resolve;});});
+  const user=userEvent.setup();render(<AgentChat {...props}/>);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Debug timeout{Enter}');
+  await user.click(screen.getByRole('button',{name:'Approve and send'}));
+  await act(async()=>emit({type:'delta',text:'{"text":"First'}));
+  expect(screen.getByText('First')).toBeTruthy();
+  expect(screen.getByText('Streaming response…')).toBeTruthy();
+  await act(async()=>emit({type:'delta',text:' second'}));
+  expect(screen.getByText('First second')).toBeTruthy();
+  expect(screen.getByRole('button',{name:'Stop'})).toBeTruthy();
+  await act(async()=>finish('{"text":"First second","blocks":[]}'));
+  expect(screen.queryByRole('button',{name:'Stop'})).toBeNull();
+  expect(screen.getAllByText('First second')).toHaveLength(1);
+});

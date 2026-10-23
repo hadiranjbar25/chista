@@ -8,7 +8,7 @@ export const responseSchema = z.object({text:z.string().max(40000),blocks:z.arra
   z.object({type:z.literal('followups'),prompts:z.array(z.string().max(500)).max(5)}),
 ])).max(8)});
 export type AgentReply = z.infer<typeof responseSchema>;
-export const uiInstructions = `Respond with a JSON object {"text":"your answer","blocks":[]}. Use blocks only when useful. Supported blocks: {"type":"chart","title":"...","items":[{"label":"...","value":1}]}, {"type":"table","title":"...","columns":["..."],"rows":[["..."]]}, {"type":"followups","prompts":["..."]}. Charts must use observed numeric evidence, never invented values. Max 8 blocks, 30 chart items, 100 table rows, 8 columns, 5 followups. Plain text is also accepted. Never emit HTML, JavaScript, tool calls or URLs for execution.`;
+export const uiInstructions = `Respond with a JSON object {"text":"your answer","blocks":[]}. Write the top-level text field first so it can stream immediately, then write blocks. Use blocks only when useful. Supported blocks: {"type":"chart","title":"...","items":[{"label":"...","value":1}]}, {"type":"table","title":"...","columns":["..."],"rows":[["..."]]}, {"type":"followups","prompts":["..."]}. Charts must use observed numeric evidence, never invented values. Max 8 blocks, 30 chart items, 100 table rows, 8 columns, 5 followups. Plain text is also accepted. Never emit HTML, JavaScript, tool calls or URLs for execution.`;
 export function parseReply(content: string): AgentReply {
   try {return responseSchema.parse(JSON.parse(content.replace(/^```(?:json)?\s*|\s*```$/g,'')));}
   catch {return {text:content,blocks:[]};}

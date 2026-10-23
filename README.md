@@ -40,7 +40,7 @@ flowchart TD
     end
 
     outgoing -->|"Approve and send"| hosted["Hosted agent analyzes context"]
-    outgoing -->|"Approve and send via CLI"| claude["Claude Code bridge → streamed text + OpenUI"]
+    outgoing -->|"Approve and send via CLI"| claude["Claude / Codex bridge → streamed text + OpenUI"]
     claude --> reply
     hosted --> reply["Response in session chat"]
 
@@ -144,9 +144,11 @@ Use **Chat agent** beside the composer to switch between Claude Code and Codex w
 
 Select **Codex** and check installation in Settings → Models. Detection checks PATH, common CLI locations and macOS VS Code extension binaries; an absolute executable override is also available. Expand **Codex · sign-in & terminal** to launch its native terminal in an included repository and complete sign-in there. Chista never collects Codex credentials.
 
-In-app requests use `codex exec --json` in an empty temporary directory and reuse native authentication. The CLI emits completed agent messages, which Chista renders as text and validated OpenUI blocks; it does not mirror the terminal or assume token-by-token events. The CLI’s default cloud model is used. Shell/image/browser/computer tools, user configuration, hooks, plugins, apps, MCP, project instructions and memory injection are disabled; execution is ephemeral with a restricted filesystem profile and no command network access. Only approved sanitized strings go over stdin. MCP calls remain separately approved in Chista. A recent CLI supporting these flags is required; unsupported configurations fail without weaker retries.
+In-app requests start a dedicated `codex app-server --stdio` in an empty temporary directory and reuse native authentication. Chista opens an ephemeral thread, forwards `item/agentMessage/delta` notifications immediately and reconciles the final message on completion. It never attaches to a shared daemon or an existing thread. The OpenAI cloud provider is selected; the CLI’s configured model is retained.
 
-References: [official non-interactive CLI documentation](https://developers.openai.com/codex/noninteractive), [configuration reference](https://developers.openai.com/codex/config-reference).
+App-server does not support exec’s `--ignore-user-config`. Instead, Chista explicitly overrides custom instructions and disables shell/image/browser/computer tools, hooks, plugins, apps, MCP server configuration, project instructions and memory injection. The restricted filesystem profile prevents repository access and command network traffic. Chista reads effective configuration before creating the thread and explicitly disables each inherited MCP server; empty configuration alone does not remove inherited entries. Configuration values and credentials are never forwarded to the model. Incoming tool/approval requests are rejected. Only approved sanitized strings go over stdin. MCP calls remain separately approved in Chista. A recent CLI supporting these settings is required; unsupported configurations fail without weaker retries.
+
+References: [official app-server documentation](https://developers.openai.com/codex/app-server), [configuration reference](https://developers.openai.com/codex/config-reference).
 
 ### Claude Code
 
@@ -165,7 +167,7 @@ The optional external terminal is separate: it launches Claude in an included re
 
 `src/integrations/providers.ts` defines `ModelProvider`, `ModelRequest` and the provider implementations. The optional hosted adapter accepts an HTTPS chat-completions endpoint, a model identifier and optional API bearer token. It sends `{ model, stream: false, messages }` and expects `choices[0].message.content`. This is a compatible-endpoint adapter, not a universal adapter for every vendor API. Add another implementation of `ModelProvider` for a different protocol.
 
-For hosted providers, the exact JSON body, including instructions, sanitized history and reviewed context, is previewed before each send. Structured UI follows the response contract in `src/AgentResponse.tsx`. No tool execution is delegated to model responses. Tokens/configuration remain in memory. Requests have cancellation and a 125-second UI timeout (the Claude subprocess has a 120-second limit). Status distinguishes configured, connecting, last-successful and failed states. There are no background model calls. Browser preview blocks live network integrations and supports local file review only.
+For hosted providers, the exact JSON body, including instructions, sanitized history, reviewed context and `stream: true`, is previewed before each send. SSE text chunks render immediately. Endpoints that ignore streaming and return JSON remain compatible but can only display completed text. Structured UI follows the response contract in `src/AgentResponse.tsx`. No tool execution is delegated to model responses. Tokens/configuration remain in memory. Requests have cancellation and a 125-second UI timeout (the Claude subprocess has a 120-second limit). Status distinguishes configured, connecting, last-successful and failed states. There are no background model calls. Browser preview blocks live network integrations and supports local file review only.
 
 ## MCP tools
 
@@ -183,10 +185,14 @@ Raw files, original filenames, placeholder mappings, custom terms, chat history 
 
 ## Validation and current blockers
 
-The frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
+The 38 frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
 
-Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and twelve Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
+Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and fourteen Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
 
-The installed Codex CLI was verified against a localhost mock Responses endpoint with a synthetic prompt; no debug data was sent to an AI service. The CLI exposed no shell, file, or MCP tools in that test. Live cloud authentication and generation are not verified.
+The installed Codex CLI was verified against a localhost mock Responses endpoint with a synthetic prompt; no debug data was sent to an AI service. Two text deltas arrived before turn completion. No file, shell or MCP tools were exposed after explicitly disabling inherited MCP servers for the ephemeral thread. Live cloud authentication and generation are not verified.
 
 Claude Code 2.1.309 is installed at `/opt/homebrew/bin/claude`. Its native authentication check reports not signed in; model access remains blocked until you complete Claude’s login flow. Chista checks this before starting inference and reports sign-in, rate-limit, billing and network errors without echoing provider diagnostics. Live hosted-provider and MCP credentials were not provided; those transports are tested with mocks. Local file review needs no credentials. Test fixtures are not bundled into the application.
+
+### Streaming behavior
+
+Text is displayed as it arrives, with a streaming indicator and Stop control. JSON response instructions request the prose first. Charts, tables and follow-up controls appear only after the completed response validates. No artificial typing animation or delayed replay is used. Tests cover partial output before completion, split UTF-8 and SSE frames, cancellation, and truncated streams.
