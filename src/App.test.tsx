@@ -76,7 +76,7 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByRole('button',{name:'Back to chat'}));
     expect(screen.queryByRole('button',{name:/characters of reviewed context attached/})).toBeNull();
   });
-  it('includes multiple repos without making repos own sessions and limits Claude launches to them',async()=>{
+  it('includes multiple repos without making repos own sessions',async()=>{
     localStorage.setItem('chista.repositories.v1',JSON.stringify(repos));
     const user=userEvent.setup();render(<App/>);
     await user.click(screen.getByRole('button',{name:'Repos · 0'}));
@@ -88,11 +88,11 @@ describe('conversation workspace',()=>{
     expect(screen.getByText('Included repositories · 2')).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'Settings'}));await user.click(screen.getByRole('button',{name:'Models'}));
     await user.selectOptions(screen.getByLabelText('Active agent'),'claude');await user.click(screen.getByRole('button',{name:'Back to chat'}));
-    await user.selectOptions(screen.getByRole('combobox',{name:'Launch repository'}),'web');
     await user.click(screen.getByRole('checkbox',{name:'Web /repos/web'}));
-    expect((screen.getByRole('combobox',{name:'Launch repository'}) as HTMLSelectElement).value).toBe('api');
+    expect(screen.getByText('Included repositories · 1')).toBeTruthy();
     await user.click(screen.getByRole('checkbox',{name:'API /repos/api'}));
-    expect((screen.getByRole('button',{name:'Launch Claude Code'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Included repositories · 0')).toBeTruthy();
+    expect(screen.queryByText(/sign-in & terminal/)).toBeNull();
   });
   it('migrates project metadata into the independent repository catalog',async()=>{
     localStorage.setItem('chista.projects.v1',JSON.stringify(repos));const user=userEvent.setup();render(<App/>);

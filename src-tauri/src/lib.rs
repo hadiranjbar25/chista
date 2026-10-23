@@ -13,6 +13,8 @@ pub fn run() {
             claude::claude_chat,
             claude::cancel_agent_chat,
             claude::codex_status,
+            claude::codex_auth_status,
+            claude::codex_sign_in,
             claude::launch_codex,
             claude::codex_chat
         ])

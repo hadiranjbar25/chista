@@ -86,7 +86,7 @@ Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) sep
 
 ## Connect your agent
 
-Open the desktop app. Claude Code is selected by default. In **Settings → Models**, check its installation or provide the executable path. Complete sign-in in Claude’s native terminal flow. Alternatively configure a hosted provider. Claude’s check reports installation and native sign-in status; the first approved request verifies model access. Codex installation detection alone does not verify authentication.
+Open the desktop app. Codex is selected by default. In **Settings → Models**, check its installation or provide the executable path. Complete sign-in in Claude’s native terminal flow. Alternatively configure a hosted provider. Claude’s check reports installation and native sign-in status; the first approved request verifies model access. Codex installation detection alone does not verify authentication.
 
 Start with your own question or import debug files. There are no preloaded incidents or simulated answers. Connection failures stay visible and never switch to a scripted provider.
 
@@ -142,7 +142,7 @@ Use **Chat agent** beside the composer to switch between Claude Code and Codex w
 
 ### Codex
 
-Select **Codex** and check installation in Settings → Models. Detection checks PATH, common CLI locations and macOS VS Code extension binaries; an absolute executable override is also available. Expand **Codex · sign-in & terminal** to launch its native terminal in an included repository and complete sign-in there. Chista never collects Codex credentials.
+Select **Codex** and check installation in Settings → Models. Detection checks PATH, common CLI locations and macOS VS Code extension binaries; an absolute executable override is also available. After you approve a message, Chista checks `codex login status`. If needed, it opens `codex login` in Terminal and waits for sign-in before sending the approved message automatically. Chista never collects Codex credentials.
 
 In-app requests start a dedicated `codex app-server --stdio` in an empty temporary directory and reuse native authentication. Chista opens an ephemeral thread, forwards `item/agentMessage/delta` notifications immediately and reconciles the final message on completion. It never attaches to a shared daemon or an existing thread. The OpenAI cloud provider is selected; the CLI’s configured model is retained.
 
@@ -153,7 +153,7 @@ References: [official app-server documentation](https://developers.openai.com/co
 ### Claude Code
 
 1. Run the Tauri desktop app and select **Settings → Models → Claude Code**. Check installation or enter an absolute executable path.
-2. If sign-in is needed, click **Sign in to Claude** in Settings or expand **Claude Code · sign-in & terminal** in chat. This opens `claude auth login` in Terminal without requiring a repository. Complete Claude’s own sign-in flow there. Chista never asks for Claude credentials.
+2. After message approval, Chista checks sign-in and opens `claude auth login` in Terminal if needed. Complete Claude’s own flow; the approved message then continues automatically. No repository is required. Manual sign-in is also available in Settings. Chista never asks for Claude credentials.
 3. Type a message, review the exact sanitized conversation payload and approve it. Text streams above the composer; validated structured responses render as interactive OpenUI charts, tables and follow-up controls. Plain-text answers also work.
 4. **Stop**, switching sessions or closing chat cancels the request. Failed requests are not automatically retried or replaced with scripted results.
 
@@ -161,7 +161,7 @@ The bridge launches `claude -p` with streaming JSON through a narrow Tauri comma
 
 A recent Claude Code CLI supporting `--safe-mode` is required. Unsupported flags or missing authentication produce an error; Chista never retries with weaker restrictions. Existing CLI authentication and provider configuration determine the cloud destination. Managed enterprise policies still apply. See the [official CLI reference](https://code.claude.com/docs/en/cli-reference).
 
-The optional external terminal is separate: it launches Claude in an included repository with its native file permissions and does not stream into Chista. macOS and Linux terminal launch are supported; Windows terminal launch is not implemented. Browser mode supports local file review; Claude chat requires desktop.
+The chat has no terminal setup section. Native login opens on macOS and Linux; Windows users receive the command to run in their own terminal. Chista waits up to five minutes for sign-in. Stop, switching agents/sessions, or leaving chat cancels the pending send and preserves the draft. Browser mode supports local file review; agent chat requires desktop.
 
 ### Hosted model providers
 
@@ -185,9 +185,9 @@ Raw files, original filenames, placeholder mappings, custom terms, chat history 
 
 ## Validation and current blockers
 
-The 38 frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
+The frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
 
-Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and fourteen Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
+Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and fifteen Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
 
 The installed Codex CLI was verified against a localhost mock Responses endpoint with a synthetic prompt; no debug data was sent to an AI service. Two text deltas arrived before turn completion. No file, shell or MCP tools were exposed after explicitly disabling inherited MCP servers for the ephemeral thread. Live cloud authentication and generation are not verified.
 

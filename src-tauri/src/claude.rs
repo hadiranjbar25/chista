@@ -79,7 +79,7 @@ fn resolve_cli(configured: &str, name: &str) -> Result<PathBuf, String> {
 pub fn claude_status(executable_path: String) -> Result<String, String> {
     resolve_claude(&executable_path).map(|p| p.to_string_lossy().into_owned())
 }
-const SIGN_IN_REQUIRED: &str = "Claude Code is not signed in. Choose Sign in to Claude, finish the native login flow, then send your message again.";
+const SIGN_IN_REQUIRED: &str = "Claude Code is not signed in. Choose Sign in to Claude, finish the native login flow, then return to Chista.";
 
 fn read_claude_auth(binary: &Path) -> Result<bool, String> {
     use std::{
@@ -135,10 +135,25 @@ pub async fn claude_auth_status(executable_path: String) -> Result<bool, String>
 }
 #[tauri::command]
 pub fn claude_sign_in(executable_path: String) -> Result<String, String> {
-    let binary = resolve_claude(&executable_path)?;
+    launch_sign_in(resolve_claude(&executable_path)?, "claude")
+}
+#[tauri::command]
+pub fn codex_sign_in(executable_path: String) -> Result<String, String> {
+    launch_sign_in(resolve_cli(&executable_path, "codex")?, "codex")
+}
+fn launch_sign_in(binary: PathBuf, agent: &str) -> Result<String, String> {
+    let args = if agent == "claude" {
+        vec!["auth", "login"]
+    } else {
+        vec!["login"]
+    };
     #[cfg(target_os = "macos")]
     {
-        let command = format!("{} auth login", shell_quote(&binary.to_string_lossy()));
+        let command = format!(
+            "{} {}",
+            shell_quote(&binary.to_string_lossy()),
+            args.join(" ")
+        );
         let script="on run argv\ntell application \"Terminal\"\nactivate\ndo script (item 1 of argv)\nend tell\nend run";
         let result = Command::new("/usr/bin/osascript")
             .args(["-e", script, "--", &command])
@@ -149,25 +164,25 @@ pub fn claude_sign_in(executable_path: String) -> Result<String, String> {
                 "Terminal launch failed. Check macOS Automation permission for Chista.".into(),
             );
         }
-        Ok(
-            "Complete Claude sign-in in Terminal, then return here and send your message again."
-                .into(),
-        )
+        Ok("Complete sign-in in Terminal, then return to Chista.".into())
     }
     #[cfg(target_os = "linux")]
     {
         Command::new("x-terminal-emulator")
             .arg("-e")
             .arg(binary)
-            .args(["auth", "login"])
+            .args(&args)
             .spawn()
             .map_err(|_| "Could not open terminal for sign-in.")?;
-        Ok("Complete Claude sign-in in your terminal, then return here.".into())
+        Ok("Complete sign-in in your terminal, then return here.".into())
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = binary;
-        Err("Run claude auth login in your terminal, then return here.".into())
+        Err(format!(
+            "Run {agent} {} in your terminal, then return here.",
+            args.join(" ")
+        ))
     }
 }
 
@@ -179,6 +194,49 @@ pub fn launch_claude(repo_path: String, executable_path: String) -> Result<Strin
 pub fn codex_status(executable_path: String) -> Result<String, String> {
     resolve_cli(&executable_path, "codex").map(|p| p.to_string_lossy().into_owned())
 }
+
+#[tauri::command]
+pub async fn codex_auth_status(executable_path: String) -> Result<bool, String> {
+    let binary = resolve_cli(&executable_path, "codex")?;
+    tauri::async_runtime::spawn_blocking(move || read_codex_auth(&binary))
+        .await
+        .map_err(|_| "Sign-in check failed.".to_string())?
+}
+fn read_codex_auth(binary: &Path) -> Result<bool, String> {
+    use std::{
+        process::Stdio,
+        time::{Duration, Instant},
+    };
+    // Only inspect the exit status; account details never cross into the UI.
+    let mut child = Command::new(binary)
+        .args(["login", "status"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "Could not check Codex sign-in status.")?;
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                return match status.code() {
+                    Some(0) => Ok(true),
+                    Some(1) => Ok(false),
+                    _ => Err("Codex sign-in check failed. Check the CLI in Settings.".into()),
+                }
+            }
+            Ok(None) if started.elapsed() < Duration::from_secs(15) => {
+                std::thread::sleep(Duration::from_millis(25))
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("Codex sign-in check timed out or failed.".into());
+            }
+        }
+    }
+}
+
 #[tauri::command]
 pub fn launch_codex(repo_path: String, executable_path: String) -> Result<String, String> {
     launch_cli(repo_path, resolve_cli(&executable_path, "codex")?, "Codex")
@@ -662,6 +720,19 @@ printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"result":"h
         }
         assert!(!args.contains(&"--oss"));
         assert!(resolve_cli("./codex", "codex").is_err());
+    }
+    #[test]
+    fn codex_auth_checks_exit_status_without_exposing_account_output() {
+        for (exit, expected) in [(0, Some(true)), (1, Some(false)), (2, None)] {
+            let (_dir, binary) = fixture(&format!(
+                "[ \"$*\" = 'login status' ] || exit 9\nprintf 'private-account' >&2\nexit {exit}"
+            ));
+            let result = read_codex_auth(&binary);
+            match expected {
+                Some(value) => assert_eq!(result.unwrap(), value),
+                None => assert!(!result.unwrap_err().contains("private-account")),
+            }
+        }
     }
     #[test]
     fn auth_status_returns_only_sign_in_state() {

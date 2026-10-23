@@ -1,16 +1,17 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, expect, it, vi } from 'vitest';
-const native = vi.hoisted(() => ({ invoke: vi.fn() }));
+import { beforeEach, afterEach, expect, it, vi } from 'vitest';
+const native = vi.hoisted(() => ({ invoke: vi.fn(), auth: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => true,
-  invoke: native.invoke,
+  invoke: (command: string, args: unknown) => command.endsWith('_auth_status') ? native.auth(command,args) : native.invoke(command,args),
   Channel: class { onmessage: (event: unknown) => void = () => {}; },
 }));
 import AgentChat from './AgentChat';
 import { McpConnections } from './integrations/mcp';
-afterEach(() => { cleanup(); native.invoke.mockReset(); });
+beforeEach(() => { native.auth.mockResolvedValue(true); });
+afterEach(() => { cleanup(); native.invoke.mockReset(); native.auth.mockReset(); native.auth.mockResolvedValue(true); });
 const props = {
   repositories: [], session: { id: 'session', name: 'Investigation', repoIds: [] },
   context: 'Reviewed evidence: 2 timeouts', mode: 'claude', claudePath: '',
@@ -67,20 +68,33 @@ it('switching providers revokes pending approval without sending', async () => {
   expect(screen.getByRole('dialog').textContent).toContain('Codex CLI');
 });
 
-it('offers native sign-in without a repository and preserves a failed draft for retry', async () => {
+it.each(['claude','codex'])('opens %s native sign-in and resumes the approved message once', async agent => {
+  native.auth.mockResolvedValueOnce(false).mockResolvedValue(true);
   native.invoke.mockImplementation(async command => {
-    if(command==='claude_sign_in') return 'Complete sign-in in Terminal.';
-    throw new Error('Claude Code is not signed in. Choose Sign in to Claude.');
+    if (command === `${agent}_sign_in`) return 'Sign in in Terminal';
+    return '{"text":"Investigation complete","blocks":[]}';
   });
-  const user=userEvent.setup();render(<AgentChat {...props}/>);
+  const user=userEvent.setup();render(<AgentChat {...props} mode={agent}/>);
+  expect(screen.queryByText(/sign-in & terminal/)).toBeNull();
   await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Check this timeout{Enter}');
+  expect(native.auth).not.toHaveBeenCalled();
   await user.click(screen.getByRole('button',{name:'Approve and send'}));
-  await user.click(await screen.findByRole('button',{name:'Open Claude sign-in'}));
-  expect(native.invoke).toHaveBeenCalledWith('claude_sign_in',{executablePath:''});
-  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Check this timeout');
-  await user.click(screen.getByRole('button',{name:'Send'}));
-  const body=JSON.parse(screen.getByRole('dialog').querySelector('pre')!.textContent!);
-  expect(body.messages.filter((m:{content:string})=>m.content==='Check this timeout')).toHaveLength(1);
+  expect(await screen.findByText(/Your message will continue automatically/)).toBeTruthy();
+  expect(native.invoke.mock.calls.map(c=>c[0])).toEqual([`${agent}_sign_in`]);
+  expect(await screen.findByText('Investigation complete', {}, {timeout:4000})).toBeTruthy();
+  expect(native.invoke.mock.calls.map(c=>c[0])).toEqual([`${agent}_sign_in`,`${agent}_chat`]);
+  expect(screen.getByRole('log').querySelectorAll('.message.user')).toHaveLength(1);
+});
+it('stopping sign-in preserves the draft and prevents a deferred send', async () => {
+  native.auth.mockResolvedValue(false);
+  native.invoke.mockResolvedValue('Sign in in Terminal');
+  const user=userEvent.setup();render(<AgentChat {...props}/>);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Keep this draft{Enter}');
+  await user.click(screen.getByRole('button',{name:'Approve and send'}));
+  await user.click(screen.getByRole('button',{name:'Stop'}));
+  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Keep this draft');
+  expect(native.invoke.mock.calls.map(c=>c[0])).toEqual(['claude_sign_in']);
+  expect(screen.getByRole('log').querySelectorAll('.message')).toHaveLength(0);
 });
 
 it('renders successive live chunks while the native request is still pending',async()=>{
