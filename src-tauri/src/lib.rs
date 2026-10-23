@@ -6,6 +6,8 @@ pub fn run() {
         .manage(claude::ChatProcesses::default())
         .invoke_handler(tauri::generate_handler![
             claude::claude_status,
+            claude::claude_auth_status,
+            claude::claude_sign_in,
             claude::launch_claude,
             claude::claude_chat,
             claude::cancel_agent_chat,

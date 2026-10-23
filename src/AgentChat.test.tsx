@@ -66,3 +66,19 @@ it('switching providers revokes pending approval without sending', async () => {
   await user.click(screen.getByRole('button',{name:'Send'}));
   expect(screen.getByRole('dialog').textContent).toContain('Codex CLI');
 });
+
+it('offers native sign-in without a repository and preserves a failed draft for retry', async () => {
+  native.invoke.mockImplementation(async command => {
+    if(command==='claude_sign_in') return 'Complete sign-in in Terminal.';
+    throw new Error('Claude Code is not signed in. Choose Sign in to Claude.');
+  });
+  const user=userEvent.setup();render(<AgentChat {...props}/>);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Check this timeout{Enter}');
+  await user.click(screen.getByRole('button',{name:'Approve and send'}));
+  await user.click(await screen.findByRole('button',{name:'Open Claude sign-in'}));
+  expect(native.invoke).toHaveBeenCalledWith('claude_sign_in',{executablePath:''});
+  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Check this timeout');
+  await user.click(screen.getByRole('button',{name:'Send'}));
+  const body=JSON.parse(screen.getByRole('dialog').querySelector('pre')!.textContent!);
+  expect(body.messages.filter((m:{content:string})=>m.content==='Check this timeout')).toHaveLength(1);
+});

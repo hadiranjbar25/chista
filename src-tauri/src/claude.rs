@@ -79,6 +79,98 @@ fn resolve_cli(configured: &str, name: &str) -> Result<PathBuf, String> {
 pub fn claude_status(executable_path: String) -> Result<String, String> {
     resolve_claude(&executable_path).map(|p| p.to_string_lossy().into_owned())
 }
+const SIGN_IN_REQUIRED: &str = "Claude Code is not signed in. Choose Sign in to Claude, finish the native login flow, then send your message again.";
+
+fn read_claude_auth(binary: &Path) -> Result<bool, String> {
+    use std::{
+        io::Read,
+        process::Stdio,
+        time::{Duration, Instant},
+    };
+    let mut child = Command::new(binary)
+        .args(["auth", "status"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "Could not check Claude sign-in status.")?;
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if started.elapsed() < Duration::from_secs(15) => {
+                std::thread::sleep(Duration::from_millis(25))
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("Claude sign-in check timed out or failed. Open its native terminal to check your account.".into());
+            }
+        }
+    }
+    let mut output = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .take(65536)
+        .read_to_string(&mut output)
+        .map_err(|_| "Could not read Claude sign-in status.")?;
+    parse_auth_status(&output)
+}
+fn parse_auth_status(output: &str) -> Result<bool, String> {
+    let value: serde_json::Value = serde_json::from_str(output)
+        .map_err(|_| "Claude sign-in status is unavailable. Update Claude Code and try again.")?;
+    // Return only the boolean, never email, organization, auth path or credentials.
+    value["loggedIn"]
+        .as_bool()
+        .ok_or_else(|| "Claude returned an unrecognized sign-in status. Update the CLI.".into())
+}
+#[tauri::command]
+pub async fn claude_auth_status(executable_path: String) -> Result<bool, String> {
+    let binary = resolve_claude(&executable_path)?;
+    tauri::async_runtime::spawn_blocking(move || read_claude_auth(&binary))
+        .await
+        .map_err(|_| "Sign-in check failed.".to_string())?
+}
+#[tauri::command]
+pub fn claude_sign_in(executable_path: String) -> Result<String, String> {
+    let binary = resolve_claude(&executable_path)?;
+    #[cfg(target_os = "macos")]
+    {
+        let command = format!("{} auth login", shell_quote(&binary.to_string_lossy()));
+        let script="on run argv\ntell application \"Terminal\"\nactivate\ndo script (item 1 of argv)\nend tell\nend run";
+        let result = Command::new("/usr/bin/osascript")
+            .args(["-e", script, "--", &command])
+            .output()
+            .map_err(|_| "Could not open Terminal for sign-in.")?;
+        if !result.status.success() {
+            return Err(
+                "Terminal launch failed. Check macOS Automation permission for Chista.".into(),
+            );
+        }
+        Ok(
+            "Complete Claude sign-in in Terminal, then return here and send your message again."
+                .into(),
+        )
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("x-terminal-emulator")
+            .arg("-e")
+            .arg(binary)
+            .args(["auth", "login"])
+            .spawn()
+            .map_err(|_| "Could not open terminal for sign-in.")?;
+        Ok("Complete Claude sign-in in your terminal, then return here.".into())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = binary;
+        Err("Run claude auth login in your terminal, then return here.".into())
+    }
+}
+
 #[tauri::command]
 pub fn launch_claude(repo_path: String, executable_path: String) -> Result<String, String> {
     launch_cli(repo_path, resolve_claude(&executable_path)?, "Claude Code")
@@ -235,6 +327,16 @@ async fn chat(
             "codex"
         },
     )?;
+    if agent == Agent::Claude {
+        let auth_binary = binary.clone();
+        let signed_in =
+            tauri::async_runtime::spawn_blocking(move || read_claude_auth(&auth_binary))
+                .await
+                .map_err(|_| "Claude sign-in check failed.".to_string())??;
+        if !signed_in {
+            return Err(SIGN_IN_REQUIRED.into());
+        }
+    }
     let cancelled = Arc::new(AtomicBool::new(false));
     let registry = processes.inner().clone();
     {
@@ -365,10 +467,7 @@ fn run_agent_chat(
                             }
                             if event["type"] == "result" {
                                 if event["is_error"] == true || event["subtype"] != "success" {
-                                    return Err(
-                                        "Claude Code failed. Check native sign-in and CLI version."
-                                            .into(),
-                                    );
+                                    return Err(claude_failure(&event));
                                 }
                                 final_text = event["result"].as_str().map(String::from);
                             }
@@ -459,6 +558,41 @@ fn codex_args() -> Vec<&'static str> {
         "analytics.enabled=false",
         "-",
     ]
+}
+
+fn claude_failure(event: &serde_json::Value) -> String {
+    // Classify locally; never echo a provider error that might contain supplied context.
+    let diagnostic = format!("{} {}", event["result"], event["errors"]).to_lowercase();
+    if [
+        "not logged in",
+        "not signed in",
+        "authentication",
+        "invalid api key",
+        "401",
+    ]
+    .iter()
+    .any(|s| diagnostic.contains(s))
+    {
+        SIGN_IN_REQUIRED.into()
+    } else if ["rate limit", "429", "usage limit"]
+        .iter()
+        .any(|s| diagnostic.contains(s))
+    {
+        "Claude reached a usage or rate limit. Check your Claude account limits and try later, or switch agents.".into()
+    } else if ["credit balance", "billing"]
+        .iter()
+        .any(|s| diagnostic.contains(s))
+    {
+        "Claude reported a billing or credit issue. Check your account in Claude’s native flow."
+            .into()
+    } else if ["connection", "network", "fetch failed", "enotfound"]
+        .iter()
+        .any(|s| diagnostic.contains(s))
+    {
+        "Claude could not reach its service. Check your network connection and try again.".into()
+    } else {
+        "Claude could not complete this request. Check its native terminal for account or service errors. Your files were not sent.".into()
+    }
 }
 
 fn stream_delta(event: &serde_json::Value) -> Option<&str> {
@@ -611,5 +745,37 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"reasoning","text":"hidde
         }
         assert!(!args.contains(&"--oss"));
         assert!(resolve_cli("./codex", "codex").is_err());
+    }
+    #[test]
+    fn auth_status_returns_only_sign_in_state() {
+        assert_eq!(
+            parse_auth_status(r#"{"loggedIn":false,"email":"private@example.com"}"#).unwrap(),
+            false
+        );
+        assert_eq!(
+            parse_auth_status(r#"{"loggedIn":true,"apiKey":"secret"}"#).unwrap(),
+            true
+        );
+        assert!(parse_auth_status("not-json secret")
+            .unwrap_err()
+            .find("secret")
+            .is_none());
+        let (_dir, binary) = fixture(r#"printf '%s\n' '{"loggedIn":false}'; exit 1"#);
+        assert!(!read_claude_auth(&binary).unwrap());
+    }
+    #[test]
+    fn classifies_errors_without_echoing_provider_data() {
+        let auth =
+            claude_failure(&serde_json::json!({"errors":["Not logged in. private@example.com"]}));
+        assert!(auth.contains("not signed in"));
+        assert!(!auth.contains("private@example.com"));
+        assert!(
+            claude_failure(&serde_json::json!({"result":"429 rate limit secret"}))
+                .contains("rate limit")
+        );
+        assert!(
+            !claude_failure(&serde_json::json!({"result":"unknown private@example.com"}))
+                .contains("private@example.com")
+        );
     }
 }

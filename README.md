@@ -86,7 +86,7 @@ Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) sep
 
 ## Connect your agent
 
-Open the desktop app. Claude Code is selected by default. In **Settings → Models**, check its installation or provide the executable path. Complete sign-in in Claude’s native terminal flow. Alternatively configure a hosted provider. Installation detection does not verify authentication; the first approved request verifies access.
+Open the desktop app. Claude Code is selected by default. In **Settings → Models**, check its installation or provide the executable path. Complete sign-in in Claude’s native terminal flow. Alternatively configure a hosted provider. Claude’s check reports installation and native sign-in status; the first approved request verifies model access. Codex installation detection alone does not verify authentication.
 
 Start with your own question or import debug files. There are no preloaded incidents or simulated answers. Connection failures stay visible and never switch to a scripted provider.
 
@@ -151,7 +151,7 @@ References: [official non-interactive CLI documentation](https://developers.open
 ### Claude Code
 
 1. Run the Tauri desktop app and select **Settings → Models → Claude Code**. Check installation or enter an absolute executable path.
-2. If sign-in is needed, expand **Claude Code · sign-in & terminal** in chat, choose an included repository and launch the native terminal. Complete Claude’s own sign-in flow there. Chista never asks for Claude credentials.
+2. If sign-in is needed, click **Sign in to Claude** in Settings or expand **Claude Code · sign-in & terminal** in chat. This opens `claude auth login` in Terminal without requiring a repository. Complete Claude’s own sign-in flow there. Chista never asks for Claude credentials.
 3. Type a message, review the exact sanitized conversation payload and approve it. Text streams above the composer; validated structured responses render as interactive OpenUI charts, tables and follow-up controls. Plain-text answers also work.
 4. **Stop**, switching sessions or closing chat cancels the request. Failed requests are not automatically retried or replaced with scripted results.
 
@@ -185,8 +185,8 @@ Raw files, original filenames, placeholder mappings, custom terms, chat history 
 
 The frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
 
-Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and ten Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
+Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and twelve Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
 
 The installed Codex CLI was verified against a localhost mock Responses endpoint with a synthetic prompt; no debug data was sent to an AI service. The CLI exposed no shell, file, or MCP tools in that test. Live cloud authentication and generation are not verified.
 
-The Claude executable was not found at the checked installation paths, so live sign-in and cloud generation remain unverified. Install/configure a recent CLI and run a desktop smoke test with sanitized sample context. Live hosted-provider and MCP credentials were not provided; those transports are tested with mocks. Local file review needs no credentials. Test fixtures are not bundled into the application.
+Claude Code 2.1.309 is installed at `/opt/homebrew/bin/claude`. Its native authentication check reports not signed in; model access remains blocked until you complete Claude’s login flow. Chista checks this before starting inference and reports sign-in, rate-limit, billing and network errors without echoing provider diagnostics. Live hosted-provider and MCP credentials were not provided; those transports are tested with mocks. Local file review needs no credentials. Test fixtures are not bundled into the application.
