@@ -122,7 +122,7 @@ Charts support selecting categories, tables support searching, and follow-ups po
 2. Preview local redactions, optionally reveal originals locally, and add exact custom sensitive values. Consistent placeholders preserve relationships across artifacts. The **Mappings** tab shows original → placeholder pairs, occurrence counts and source artifacts. Search the mapping or hide originals on screen. The mapping stays in the session on this device and is never included in model requests, context exports or the Claude copy action.
 3. Compare sanitized artifacts by line position. OpenUI renders interactive severity charts, searchable evidence tables and follow-up controls (500 analyzed lines, 100 displayed matching rows).
 4. Select artifacts, compact them, and review the exact JSON snapshot. Duplicate lines are removed; the content budget truncates excerpts and reports omitted characters.
-5. Explicitly acknowledge review before exporting or attaching the snapshot to this session's chat. Attaching opens Agent chat, where the sanitized data can be sent to the configured hosted provider after outgoing-request review. Artifact/selection/redaction changes revoke the attachment. Raw files and filenames never enter the provider interface.
+5. Explicitly acknowledge review before exporting or attaching the snapshot to this session's chat. Attaching opens Agent chat, where the sanitized data can be sent to the configured hosted provider with optional outgoing-request review. Artifact/selection/redaction changes revoke the attachment. Raw files and filenames never enter the provider interface.
 
 Sanitization detects common secret/PII patterns and sensitive structured fields. It cannot guarantee detection of every secret; inspect the preview and add custom redactions. Chat uses a separate `CHAT_` placeholder namespace to avoid falsely associating a newly typed identity with an artifact placeholder.
 
@@ -138,11 +138,13 @@ The app starts with Claude Code selected. Selecting an integration does not send
 
 ### Switch agents
 
+The composer’s **Review before sending** checkbox is enabled by default per session. Uncheck it to send directly with the same local sanitization and native sign-in flow. Recheck it to preview each outgoing message. This preference does not bypass artifact context review or per-tool MCP approval.
+
 Use **Chat agent** beside the composer to switch between Claude Code and Codex without leaving your session. **Settings → Models → Active agent** controls the same selection and also offers a configured hosted provider. Switching cancels any active CLI request and revokes pending approval. Your conversation stays in the session; the next preview includes the sanitized history and explicitly names its new destination.
 
 ### Codex
 
-Select **Codex** and check installation in Settings → Models. Detection checks PATH, common CLI locations and macOS VS Code extension binaries; an absolute executable override is also available. After you approve a message, Chista checks `codex login status`. If needed, it opens `codex login` in Terminal and waits for sign-in before sending the approved message automatically. Chista never collects Codex credentials.
+Select **Codex** and check installation in Settings → Models. Detection checks PATH, common CLI locations and macOS VS Code extension binaries; an absolute executable override is also available. When you send a message, Chista checks `codex login status`. If needed, it opens `codex login` in Terminal and waits for sign-in before sending the approved message automatically. Chista never collects Codex credentials.
 
 In-app requests start a dedicated `codex app-server --stdio` in an empty temporary directory and reuse native authentication. Chista opens an ephemeral thread, forwards `item/agentMessage/delta` notifications immediately and reconciles the final message on completion. It never attaches to a shared daemon or an existing thread. The OpenAI cloud provider is selected; the CLI’s configured model is retained.
 
@@ -153,8 +155,8 @@ References: [official app-server documentation](https://developers.openai.com/co
 ### Claude Code
 
 1. Run the Tauri desktop app and select **Settings → Models → Claude Code**. Check installation or enter an absolute executable path.
-2. After message approval, Chista checks sign-in and opens `claude auth login` in Terminal if needed. Complete Claude’s own flow; the approved message then continues automatically. No repository is required. Manual sign-in is also available in Settings. Chista never asks for Claude credentials.
-3. Type a message, review the exact sanitized conversation payload and approve it. Text streams above the composer; validated structured responses render as interactive OpenUI charts, tables and follow-up controls. Plain-text answers also work.
+2. When sending a message, Chista checks sign-in and opens `claude auth login` in Terminal if needed. Complete Claude’s own flow; the approved message then continues automatically. No repository is required. Manual sign-in is also available in Settings. Chista never asks for Claude credentials.
+3. Type a message and send it. If **Review before sending** is checked, preview and approve the sanitized payload first. Text streams above the composer; validated structured responses render as interactive OpenUI charts, tables and follow-up controls. Plain-text answers also work.
 4. **Stop**, switching sessions or closing chat cancels the request. Failed requests are not automatically retried or replaced with scripted results.
 
 The bridge launches `claude -p` with streaming JSON through a narrow Tauri command. The payload goes over stdin, not shell arguments. Every request uses an empty temporary working directory, safe mode, no built-in or MCP tools, disabled hooks, and no CLI session persistence. Chista sends sanitized conversation history on each turn rather than resuming a potentially unsafe CLI session. Repository files and local redaction mappings are not part of the request. This is evidence-only debugging; autonomous repository edits are not enabled. MCP tools remain separately approved in Chista.

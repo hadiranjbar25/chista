@@ -114,3 +114,24 @@ it('renders successive live chunks while the native request is still pending',as
   expect(screen.queryByRole('button',{name:'Stop'})).toBeNull();
   expect(screen.getAllByText('First second')).toHaveLength(1);
 });
+
+it.each(['claude','codex'])('%s can skip the preview while still sanitizing, then enable review again', async agent => {
+  native.invoke.mockResolvedValue('{"text":"Done","blocks":[]}');
+  const user=userEvent.setup();render(<AgentChat {...props} mode={agent}/>);
+  const toggle=screen.getByRole('checkbox',{name:'Review before sending'});
+  expect((toggle as HTMLInputElement).checked).toBe(true);
+  await user.click(toggle);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Investigate alex@example.com{Enter}');
+  expect(await screen.findByText('Done')).toBeTruthy();
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(native.invoke).toHaveBeenCalledTimes(1);
+  const [command,args]=native.invoke.mock.calls[0];
+  expect(command).toBe(`${agent}_chat`);
+  expect(args.payload).not.toContain('alex@example.com');
+  expect(args.payload).toContain('[CHAT_EMAIL_1]');
+  expect(args.payload).toContain('Reviewed evidence: 2 timeouts');
+  await user.click(toggle);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Check again{Enter}');
+  expect(screen.getByRole('dialog',{name:'Approve outgoing request'})).toBeTruthy();
+  expect(native.invoke).toHaveBeenCalledTimes(1);
+});
