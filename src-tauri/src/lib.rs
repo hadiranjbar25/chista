@@ -3,7 +3,13 @@ mod claude;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![claude::claude_status, claude::launch_claude])
+        .manage(claude::ChatProcesses::default())
+        .invoke_handler(tauri::generate_handler![
+            claude::claude_status,
+            claude::launch_claude,
+            claude::claude_chat,
+            claude::cancel_claude_chat
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Chista");
 }

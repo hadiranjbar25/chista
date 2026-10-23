@@ -7,8 +7,8 @@ export type ModelRequest = { messages: Message[]; context: string | null };
 export interface ModelProvider {
   id: string;
   label: string;
-  mode: 'demo' | 'hosted';
-  complete(request: ModelRequest, signal: AbortSignal): Promise<string>;
+  mode: 'demo' | 'hosted' | 'claude';
+  complete(request: ModelRequest, signal: AbortSignal, onText?: (text: string) => void): Promise<string>;
 }
 export type HostedConfig = { endpoint: string; model: string; token: string };
 export const demoProvider: ModelProvider = {

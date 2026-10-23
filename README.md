@@ -23,7 +23,6 @@ flowchart TD
         review{"Approve sanitized snapshot?"}
         attach["Attach to session chat"]
         outgoing{"Approve outgoing request?"}
-        copy["Copy sanitized context"]
         exportFile["Export reviewed JSON"]
 
         raw --> redact
@@ -37,11 +36,12 @@ flowchart TD
         review -->|"Export"| exportFile
         attach -->|"Hosted provider"| outgoing
         outgoing -->|"Edit request"| attach
-        attach -->|"Claude Code"| copy
+        attach -->|"Claude Code"| outgoing
     end
 
     outgoing -->|"Approve and send"| hosted["Hosted agent analyzes context"]
-    copy -->|"Manually paste"| claude["Claude Code terminal"]
+    outgoing -->|"Approve and send via CLI"| claude["Claude Code bridge → streamed text + OpenUI"]
+    claude --> reply
     hosted --> reply["Response in session chat"]
 
     style device fill:#F4F1FA,stroke:#B8A4D4
@@ -106,7 +106,7 @@ Repositories form a shared catalog; sessions are independent investigations. One
 | **New session / recent sessions** | Start or return to a conversation with isolated artifacts, mappings and history. |
 | **Repos → Manage repos** | Register existing checkouts and choose which ones a session includes. |
 | **Files & mappings** | Import, mask and inspect artifacts before handing sanitized context to the agent. |
-| **Top-right Settings → Models** | Choose a hosted chat provider, demo mode or the external Claude Code terminal integration. |
+| **Top-right Settings → Models** | Choose a hosted chat provider, demo mode or the Claude Code in-app chat. |
 | **Settings → MCP** | Configure servers and discover tools; tool controls stay hidden in chat until a server is connected. |
 | **Settings → General** | Review data handling and clear saved repository metadata. |
 
@@ -132,7 +132,7 @@ Sanitization detects common secret/PII patterns and sensitive structured fields.
 
 | Option | How context reaches it | Setup |
 | --- | --- | --- |
-| **Claude Code** | Copy the reviewed sanitized context and paste it into the native terminal. | Use your installed CLI; sign in through Claude’s own flow. |
+| **Claude Code** | Review and send sanitized context; receive streamed prose and OpenUI results in chat. | Use your installed CLI; sign in through Claude’s own terminal flow. |
 | **Hosted provider** | Approve the exact outgoing request in session chat. | Configure an HTTPS chat-completions endpoint, model and optional API token. |
 | **Demo assistant** | Nothing leaves the device; responses are scripted workflow suggestions. | No connection required. |
 
@@ -140,13 +140,16 @@ The app starts in demo mode. Selecting an integration does not send data or prov
 
 ### Claude Code
 
-1. Register repository directories in Repos, create a session, and select the repos to include.
-2. In the top-right Settings → Models, choose **Claude Code**. Check installation; optionally enter an absolute executable path. Detection checks PATH and common installation locations, including `~/.local/bin/claude`.
-3. In the session chat, select a **Launch repository** from its included repos and choose **Launch Claude Code**. On macOS it opens Terminal via AppleScript; on Linux it uses `x-terminal-emulator`. Windows launch is not implemented.
+1. Run the Tauri desktop app and select **Settings → Models → Claude Code**. Check installation or enter an absolute executable path.
+2. If sign-in is needed, expand **Claude Code · sign-in & terminal** in chat, choose an included repository and launch the native terminal. Complete Claude’s own sign-in flow there. Chista never asks for Claude credentials.
+3. Type a message, review the exact sanitized conversation payload and approve it. Text streams above the composer; validated structured responses render as interactive OpenUI charts, tables and follow-up controls. Plain-text answers also work.
+4. **Stop**, switching sessions or closing chat cancels the request. Failed requests are not automatically retried or replaced with demo results.
 
-The launcher starts the installed `claude` executable in the repository directory, without a prompt or credentials. Claude handles its own native sign-in, trust and tool approval flow. Chista never runs an invented login command, collects Claude credentials, injects imported debug files, or captures terminal output. Launch success means Terminal opened, not that the CLI is authenticated.
+The bridge launches `claude -p` with streaming JSON through a narrow Tauri command. The payload goes over stdin, not shell arguments. Every request uses an empty temporary working directory, safe mode, no built-in or MCP tools, disabled hooks, and no CLI session persistence. Chista sends sanitized conversation history on each turn rather than resuming a potentially unsafe CLI session. Repository files and local redaction mappings are not part of the request. This is evidence-only debugging; autonomous repository edits are not enabled. MCP tools remain separately approved in Chista.
 
-Claude runs independently and can read files already in its repository directory under its native permissions. Keep raw debug files outside that directory. Chista does not copy imported artifacts into repositories. Reviewed context can be copied with **Copy sanitized context for Claude** and pasted into its terminal; the mapping and originals are excluded. It is not automatically passed to Claude. See the [Claude Code quickstart](https://code.claude.com/docs/en/quickstart).
+A recent Claude Code CLI supporting `--safe-mode` is required. Unsupported flags or missing authentication produce an error; Chista never retries with weaker restrictions. Existing CLI authentication and provider configuration determine the cloud destination. Managed enterprise policies still apply. See the [official CLI reference](https://code.claude.com/docs/en/cli-reference).
+
+The optional external terminal is separate: it launches Claude in an included repository with its native file permissions and does not stream into Chista. macOS and Linux terminal launch are supported; Windows terminal launch is not implemented. Browser preview remains demo-only for Claude integration.
 
 ### Hosted model providers
 
@@ -166,10 +169,12 @@ MCP configurations and tokens currently last for this app run. Disconnect before
 
 ## Data boundaries
 
-Raw files, original filenames, placeholder mappings, custom terms, chat history and reviewed snapshots live in memory. Only repository metadata goes into localStorage. Native code exposes narrow Claude detection/launch commands, plus scoped HTTP access; no general filesystem or shell plugin is enabled. The provider receives only the approved snapshot and sanitized chat strings. The application does not log payloads or credentials. Releasing references is not a secure memory-erasure guarantee.
+Raw files, original filenames, placeholder mappings, custom terms, chat history and reviewed snapshots live in memory. Only repository metadata goes into localStorage. Native code exposes narrow Claude detection, launch, chat and cancellation commands, plus scoped HTTP access; no general filesystem or shell plugin is enabled. The provider receives only the approved snapshot and sanitized chat strings. The application does not log payloads or credentials. Releasing references is not a secure memory-erasure guarantee.
 
 ## Validation and current blockers
 
-The 27 frontend tests cover text and generated OpenUI replies, the sanitizer, repository membership/migration, and session isolation, navigation preservation, reviewed-context revocation, chat preview, exact provider payloads, one-time tool approval, and SDK initialization/discovery/call/disconnect against a mock HTTP transport. `npm run build` verifies TypeScript and bundles the frontend.
+The 33 frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
 
-Native compilation and Rust launcher tests require Rust/Cargo, which were unavailable in the implementation environment. The Claude binary was not visible on PATH or at common install paths there; the executable override supports installations outside those paths. Live model/MCP credentials were not provided, so protocol behavior was tested with fixtures, not a real external service. Native terminal launch and the Tauri HTTP bridge still need a desktop smoke test after installing the toolchain.
+Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and seven Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a model. A missing desktop icon was added so Tauri can compile.
+
+The Claude executable was not found at the checked installation paths, so live sign-in and cloud generation remain unverified. Install/configure a recent CLI and run a desktop smoke test with sanitized sample context. Live hosted-provider and MCP credentials were not provided; those transports are tested with mocks. Browser demo mode needs no credentials.
