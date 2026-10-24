@@ -14,3 +14,12 @@ describe('generated OpenUI replies',()=>{
     expect(responseSchema.safeParse({text:'test',blocks:[{type:'chart',title:'test',items:[{label:'x',value:-1}]}]}).success).toBe(false);
   });
 });
+
+it('validates calendar dates and rejects inverted date bounds', () => {
+  const accepts=(min:string,max?:string)=>responseSchema.safeParse({text:'Pick a date',blocks:[{type:'date',title:'Date',min,max}]}).success;
+  expect(accepts('2024-02-29','2024-03-01')).toBe(true);
+  expect(accepts('2025-02-29')).toBe(false);
+  expect(accepts('2026-04-31')).toBe(false);
+  expect(accepts('2026-10-31','2026-10-01')).toBe(false);
+  expect(accepts('10/24/2026')).toBe(false);
+});

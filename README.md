@@ -112,9 +112,9 @@ Only repository names and directory paths survive app restarts. Previously saved
 
 ## Generated response UI
 
-Hosted agents receive a response contract for text plus optional chart, table, text-input and follow-up blocks. Chista validates those blocks and renders them through an allowlisted OpenUI component library. It does not execute model-provided JavaScript, HTML, network requests or tool calls. Invalid structured replies fall back to escaped text.
+Hosted agents receive a response contract for text plus optional chart, table, text-input, date-picker and follow-up blocks. Chista validates those blocks and renders them through an allowlisted OpenUI component library. It does not execute model-provided JavaScript, HTML, network requests or tool calls. Invalid structured replies fall back to escaped text.
 
-Charts support selecting categories, tables support searching, and follow-ups populate the composer. Agents can generate a text box using an input block; its button prepares a follow-up in the composer without sending automatically. Typed input follows the same local sanitization and optional outgoing review as any chat message. Plain-text responses work too. Charts and tables use the agent’s structured reply; local evidence views use only your imported sanitized artifacts.
+Charts support selecting categories, tables support searching, and follow-ups populate the composer. Agents can generate a text box using an input block; its button prepares a follow-up in the composer without sending automatically. Date-picker blocks offer a native calendar with optional minimum and maximum dates; their button adds the selected date and label to the composer without sending. Typed input follows the same local sanitization and optional outgoing review as any chat message. Plain-text responses work too. Charts and tables use the agent’s structured reply; local evidence views use only your imported sanitized artifacts.
 
 ## Safe Debug Sessions
 

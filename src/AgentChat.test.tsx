@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 const native = vi.hoisted(() => ({ invoke: vi.fn(), auth: vi.fn() }));
@@ -179,4 +179,21 @@ it('renders an agent-generated OpenUI text box and prepares a follow-up without 
   await user.click(screen.getByRole('button',{name:'Send'}));
   expect(native.invoke.mock.calls[1][1].payload).not.toContain('alex@example.com');
   expect(native.invoke.mock.calls[1][1].payload).toContain('[CHAT_EMAIL_1]');
+});
+
+it('renders an OpenUI date picker with bounds and prepares the selected date without sending', async () => {
+  native.invoke.mockResolvedValue(JSON.stringify({text:'Choose the incident date.',blocks:[{type:'date',title:'Incident date',min:'2026-10-01',max:'2026-10-31'}]}));
+  const user=userEvent.setup();render(<AgentChat {...props}/>);
+  await user.click(screen.getByRole('checkbox',{name:'Review before sending'}));
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Show a date picker{Enter}');
+  const date=await screen.findByLabelText('Incident date');
+  const useDate=screen.getByRole('button',{name:'Use date'}) as HTMLButtonElement;
+  expect(useDate.disabled).toBe(true);
+  fireEvent.change(date,{target:{value:'2026-11-01'}});
+  expect(useDate.disabled).toBe(true);
+  fireEvent.change(date,{target:{value:'2026-10-24'}});
+  expect(useDate.disabled).toBe(false);
+  await user.click(useDate);
+  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Incident date: 2026-10-24');
+  expect(native.invoke).toHaveBeenCalledTimes(1);
 });
