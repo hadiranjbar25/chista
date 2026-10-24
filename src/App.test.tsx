@@ -108,6 +108,7 @@ describe('conversation workspace',()=>{
   it('previews the exact sanitized hosted request before any remote send',async()=>{
     const user=userEvent.setup();render(<App/>);
     await user.click(screen.getByRole('button',{name:'Settings'}));await user.click(screen.getByRole('button',{name:'Models'}));
+    await user.click(screen.getByText('Hosted chat provider',{selector:'strong'}));
     await user.type(screen.getByLabelText('HTTPS endpoint'),'https://provider.example.com/chat');
     await user.type(screen.getByLabelText('Model identifier'),'debug-model');await user.click(screen.getByRole('button',{name:'Use hosted provider'}));
     await user.click(screen.getByRole('button',{name:'Back to chat'}));
