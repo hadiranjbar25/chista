@@ -2,13 +2,13 @@ import { createContext, useContext, useState } from 'react';
 import { createLibrary, defineComponent, Renderer } from '@openuidev/react-lang';
 import { z } from 'zod/v4';
 const item = z.object({label:z.string().max(200),value:z.number().finite().nonnegative()});
-export const responseSchema = z.object({text:z.string().max(40000),blocks:z.array(z.discriminatedUnion('type',[
+export const responseSchema = z.object({text:z.string().max(40000),sessionTitle:z.string().trim().min(1).max(60).optional().catch(undefined),blocks:z.array(z.discriminatedUnion('type',[
   z.object({type:z.literal('chart'),title:z.string().max(200),items:z.array(item).max(30)}),
   z.object({type:z.literal('table'),title:z.string().max(200),columns:z.array(z.string().max(100)).min(1).max(8),rows:z.array(z.array(z.string().max(2000)).max(8)).max(100)}),
   z.object({type:z.literal('followups'),prompts:z.array(z.string().max(500)).max(5)}),
 ])).max(8)});
 export type AgentReply = z.infer<typeof responseSchema>;
-export const uiInstructions = `Respond with a JSON object {"text":"your answer","blocks":[]}. Write the top-level text field first so it can stream immediately, then write blocks. Use blocks only when useful. Supported blocks: {"type":"chart","title":"...","items":[{"label":"...","value":1}]}, {"type":"table","title":"...","columns":["..."],"rows":[["..."]]}, {"type":"followups","prompts":["..."]}. Charts must use observed numeric evidence, never invented values. Max 8 blocks, 30 chart items, 100 table rows, 8 columns, 5 followups. Plain text is also accepted. Never emit HTML, JavaScript, tool calls or URLs for execution.`;
+export const uiInstructions = `Respond with a JSON object {"text":"your answer","blocks":[]}. Write the top-level text field first so it can stream immediately, then write blocks. On your first response, also include a sessionTitle field: a concise 3–6 word name for this debugging session, at most 60 characters, based only on the sanitized conversation. Avoid personal identifiers and secrets in the title. Use blocks only when useful. Supported blocks: {"type":"chart","title":"...","items":[{"label":"...","value":1}]}, {"type":"table","title":"...","columns":["..."],"rows":[["..."]]}, {"type":"followups","prompts":["..."]}. Charts must use observed numeric evidence, never invented values. Max 8 blocks, 30 chart items, 100 table rows, 8 columns, 5 followups. Plain text is also accepted. Never emit HTML, JavaScript, tool calls or URLs for execution.`;
 export function parseReply(content: string): AgentReply {
   try {return responseSchema.parse(JSON.parse(content.replace(/^```(?:json)?\s*|\s*```$/g,'')));}
   catch {return {text:content,blocks:[]};}

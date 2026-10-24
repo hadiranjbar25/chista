@@ -118,3 +118,19 @@ describe('conversation workspace',()=>{
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
+
+it('renames a session in the sidebar, supports cancelling, and keeps sessions separate', async () => {
+  const user=userEvent.setup();render(<App/>);
+  await user.click(screen.getByRole('button',{name:'Rename Debug session 1'}));
+  const name=screen.getByRole('textbox',{name:'Session name'});
+  await user.clear(name);await user.type(name,'Checkout timeouts{Enter}');
+  expect(screen.getByRole('button',{name:'Checkout timeouts'})).toBeTruthy();
+  expect(screen.getByRole('heading',{name:'Checkout timeouts'})).toBeTruthy();
+  await user.click(screen.getByRole('button',{name:'Rename Checkout timeouts'}));
+  await user.clear(screen.getByRole('textbox',{name:'Session name'}));
+  await user.type(screen.getByRole('textbox',{name:'Session name'}),'Discard this{Escape}');
+  expect(screen.getByRole('button',{name:'Checkout timeouts'})).toBeTruthy();
+  await user.click(screen.getByRole('button',{name:'New session'}));
+  expect(screen.getByRole('button',{name:'Checkout timeouts'})).toBeTruthy();
+  expect(screen.getByRole('heading',{name:/Debug session/})).toBeTruthy();
+});

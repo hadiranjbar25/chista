@@ -10,9 +10,9 @@ import { hostedProvider, hostedBody, prepareRequest, type HostedConfig, type Mes
 import { McpConnections, type ConnectionState, type ServerConfig, type ToolRequest } from './integrations/mcp';
 import type { Repository, Session } from './workspace';
 type Pending = { kind: 'model'; request: ModelRequest; config: HostedConfig; mode: string; executablePath: string } | { kind: 'tool'; request: ToolRequest; destination: string };
-export default function AgentChat({active=true,repositories,session,context,mode,hosted,claudePath,codexPath='',onAgentChange,servers,connections,mcp,onModelStatus,onFiles,onSettings}: {
+export default function AgentChat({active=true,repositories,session,context,mode,hosted,claudePath,codexPath='',onAgentChange,onSessionTitle,servers,connections,mcp,onModelStatus,onFiles,onSettings}: {
   active?: boolean; repositories: Repository[]; session: Session; context: string|null; mode: string; hosted: HostedConfig; claudePath: string; codexPath?: string; onAgentChange?: (mode: string) => void;
- onFiles: () => void; onSettings: () => void;
+ onSessionTitle?: (title: string) => void; onFiles: () => void; onSettings: () => void;
   onModelStatus: (key: string, status: string) => void;
   servers: ServerConfig[]; connections: Record<string,ConnectionState>; mcp: McpConnections;
 }) {
@@ -69,7 +69,12 @@ export default function AgentChat({active=true,repositories,session,context,mode
           setMessages(snapshot.request.messages);
           const reply = await provider.complete(snapshot.request,abort.current.signal, text => { if(mounted.current) setStream(sanitizer.current.text(streamingProse(text))); });
           if (snapshot.mode === 'hosted') onModelStatus(JSON.stringify([snapshot.config.endpoint,snapshot.config.model]),'Connected · last request succeeded');
-          if (mounted.current) {setMessages([...snapshot.request.messages,{role:'assistant',content:sanitizer.current.sanitize(JSON.stringify(parseReply(reply)),'json',[])}]);setPrompt('');}
+          if (mounted.current) {
+            const content = sanitizer.current.sanitize(JSON.stringify(parseReply(reply)),'json',[]);
+            const title = parseReply(content).sessionTitle;
+            if (title && !snapshot.request.messages.some(message=>message.role==='assistant')) onSessionTitle?.(title);
+            setMessages([...snapshot.request.messages,{role:'assistant',content}]);setPrompt('');
+          }
         } finally { clearTimeout(timer); }
       } else {
         mcp.approvals.approve(snapshot.request);

@@ -1,5 +1,5 @@
 export type Repository = { id: string; name: string; path: string };
-export type Session = { id: string; repoIds: string[]; name: string };
+export type Session = { id: string; repoIds: string[]; name: string; nameSource?: 'agent' | 'user' };
 export const newSession = (name: string): Session => ({ id: crypto.randomUUID(), repoIds: [], name });
 export function sessionRepositories(session: Session, repositories: Repository[]) {
   return repositories.filter(repo => session.repoIds.includes(repo.id));
@@ -15,4 +15,10 @@ export function loadRepositories(): Repository[] {
       seen.add(repo.id); return true;
     });
   } catch { return []; }
+}
+
+export function renameSession(session: Session, name: string, source: 'agent' | 'user'): Session {
+  const clean = name.replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (!clean || (source === 'agent' && session.nameSource)) return session;
+  return { ...session, name: clean, nameSource: source };
 }

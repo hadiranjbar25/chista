@@ -7,3 +7,5 @@
 .chat-composer .jump-to-latest{position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);border-radius:20px;background:#fff;box-shadow:0 3px 14px #31204318;font-size:12px;white-space:nowrap}
 
 .review-toggle{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#787083;cursor:pointer}.review-toggle input{width:13px;height:13px;margin:0;accent-color:#8358bd;flex-shrink:0}
+
+.session-nav-row{display:flex;align-items:center;min-width:0;border-radius:7px}.session-nav-row .session-select{flex:1;min-width:0;text-align:left}.session-select>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.session-select .green-dot{flex-shrink:0}.session-nav-row .session-rename{flex-shrink:0;padding:7px;color:#857693}.session-nav-row form{width:100%;padding:4px}.session-nav-row input{width:100%;min-width:0;font-size:11px;padding:6px}

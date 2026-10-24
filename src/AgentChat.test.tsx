@@ -135,3 +135,17 @@ it.each(['claude','codex'])('%s can skip the preview while still sanitizing, the
   expect(screen.getByRole('dialog',{name:'Approve outgoing request'})).toBeTruthy();
   expect(native.invoke).toHaveBeenCalledTimes(1);
 });
+
+it('takes a sanitized session title from the first agent response only', async () => {
+  const onSessionTitle=vi.fn();
+  native.invoke.mockResolvedValueOnce('{"text":"First answer","blocks":[],"sessionTitle":"Timeout for alex@example.com"}')
+    .mockResolvedValueOnce('{"text":"Next answer","blocks":[],"sessionTitle":"Different title"}');
+  const user=userEvent.setup();render(<AgentChat {...props} onSessionTitle={onSessionTitle}/>);
+  await user.click(screen.getByRole('checkbox',{name:'Review before sending'}));
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Debug timeout{Enter}');
+  await screen.findByText('First answer');
+  expect(onSessionTitle).toHaveBeenCalledWith('Timeout for [CHAT_EMAIL_1]');
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Continue{Enter}');
+  await screen.findByText('Next answer');
+  expect(onSessionTitle).toHaveBeenCalledTimes(1);
+});
