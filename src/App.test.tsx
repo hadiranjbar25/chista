@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
@@ -133,4 +133,25 @@ it('renames a session in the sidebar, supports cancelling, and keeps sessions se
   await user.click(screen.getByRole('button',{name:'New session'}));
   expect(screen.getByRole('button',{name:'Checkout timeouts'})).toBeTruthy();
   expect(screen.getByRole('heading',{name:/Debug session/})).toBeTruthy();
+});
+
+it.each(['+ Add files','Add debug files'])('%s opens the active session picker before navigating', async label => {
+  const user=userEvent.setup();render(<App/>);
+  await user.click(screen.getByRole('button',{name:'New session'}));
+  const inputs=document.querySelectorAll<HTMLInputElement>('input[type="file"]');
+  const first=vi.fn();const second=vi.fn();
+  inputs[0].addEventListener('click',first);inputs[1].addEventListener('click',second);
+  await user.click(screen.getByRole('button',{name:label}));
+  expect(first).not.toHaveBeenCalled();expect(second).toHaveBeenCalledTimes(1);
+  // Cancelling the native picker leaves the conversation visible.
+  expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
+  const file=new File(['email,status\nalex@example.com,error'],'error.csv',{type:'text/csv'});
+  Object.defineProperty(file,'text',{value:async()=> 'email,status\nalex@example.com,error'});
+  await user.upload(inputs[1],file);
+  expect(await screen.findByText('1 artifact(s) imported and sanitized locally.')).toBeTruthy();
+  expect(screen.queryByRole('textbox',{name:'Message agent'})).toBeNull();
+  await user.click(screen.getByRole('button',{name:/^error\.csv/}));
+  expect(screen.getByText('Sanitized preview').nextElementSibling?.textContent).not.toContain('alex@example.com');
+  await user.click(screen.getByRole('button',{name:'Debug session 1'}));
+  expect(screen.queryByRole('button',{name:'Remove error.csv'})).toBeNull();
 });

@@ -4,7 +4,7 @@
 
 Chista is a desktop chat workspace for debugging with an AI agent. Type in the composer at the bottom; answers appear above it as text and, when useful, generated OpenUI charts, tables and follow-up controls. Start a session and optionally include multiple repos or sanitized debug files.
 
-The sidebar contains recent sessions. The first structured agent response supplies a short session name. Use the pencil beside a session (or double-click its name) to rename it; Enter or moving focus saves, and Escape cancels. Manual names are never replaced by agent suggestions. Plain-text replies keep the placeholder name until you rename it. Settings lives in the top right. Repo selection and file review open only when you need them; they are not steps you must complete before chatting.
+The sidebar contains recent sessions. The first structured agent response supplies a short session name. Use the pencil beside a session (or double-click its name) to rename it; Enter or moving focus saves, and Escape cancels. Manual names are never replaced by agent suggestions. Plain-text replies keep the placeholder name until you rename it. Settings lives in the top right. **Add files** in chat opens the file picker directly; cancelling leaves chat open, while selecting files opens local import and redaction review. Repo selection and file review open only when you need them; they are not steps you must complete before chatting.
 
 Redaction happens locally. AI analysis runs through your configured hosted provider or Claude Code. Chista does not run or download a local model.
 
