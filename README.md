@@ -15,7 +15,7 @@ Redaction happens locally. AI analysis runs through your configured hosted provi
 ```mermaid
 flowchart TD
     subgraph device ["On your device — Chista session"]
-        raw["Import CSV, JSON or logs"]
+        raw["Import CSV, TSV, JSON or logs"]
         redact["Redact sensitive values"]
         mapping["Inspect original-to-placeholder mapping"]
         evidence["Compare sanitized artifacts"]
@@ -64,7 +64,7 @@ Pattern detection can miss sensitive information. Review the output and add cust
 
 ## What you can do
 
-- **Investigate across files:** import logs, CSV request data and JSON configuration into one session, with consistent masking across artifacts.
+- **Investigate across files:** import logs, CSV or TSV request data and JSON configuration into one session, with consistent masking across artifacts.
 - **Understand every replacement:** review sanitized previews and search a local mapping of originals, placeholders, occurrence counts and source files.
 - **Explore the evidence:** compare artifacts and use OpenUI charts, searchable tables and follow-up controls. These views use local heuristics, not AI diagnoses.
 - **Give the agent focused context:** select artifacts, remove duplicate lines, set a content budget and review the exact payload before sharing.
@@ -112,13 +112,13 @@ Only repository names and directory paths survive app restarts. Previously saved
 
 ## Generated response UI
 
-Hosted agents receive a response contract for text plus optional chart, table and follow-up blocks. Chista validates those blocks and renders them through an allowlisted OpenUI component library. It does not execute model-provided JavaScript, HTML, network requests or tool calls. Invalid structured replies fall back to escaped text.
+Hosted agents receive a response contract for text plus optional chart, table, text-input and follow-up blocks. Chista validates those blocks and renders them through an allowlisted OpenUI component library. It does not execute model-provided JavaScript, HTML, network requests or tool calls. Invalid structured replies fall back to escaped text.
 
-Charts support selecting categories, tables support searching, and follow-ups populate the composer. Plain-text responses work too. Charts and tables use the agent’s structured reply; local evidence views use only your imported sanitized artifacts.
+Charts support selecting categories, tables support searching, and follow-ups populate the composer. Agents can generate a text box using an input block; its button prepares a follow-up in the composer without sending automatically. Typed input follows the same local sanitization and optional outgoing review as any chat message. Plain-text responses work too. Charts and tables use the agent’s structured reply; local evidence views use only your imported sanitized artifacts.
 
 ## Safe Debug Sessions
 
-1. Import header-based CSV, JSON, LOG or TXT; up to 20 artifacts, 2 MB each.
+1. Import header-based CSV or TSV, JSON, LOG or TXT; up to 20 artifacts, 2 MB each.
 2. Preview local redactions, optionally reveal originals locally, and add exact custom sensitive values. Consistent placeholders preserve relationships across artifacts. The **Mappings** tab shows original → placeholder pairs, occurrence counts and source artifacts. Search the mapping or hide originals on screen. The mapping stays in the session on this device and is never included in model requests, context exports or the Claude copy action.
 3. Compare sanitized artifacts by line position. OpenUI renders interactive severity charts, searchable evidence tables and follow-up controls (500 analyzed lines, 100 displayed matching rows).
 4. Select artifacts, compact them, and review the exact JSON snapshot. Duplicate lines are removed; the content budget truncates excerpts and reports omitted characters.

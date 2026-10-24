@@ -164,3 +164,19 @@ it('sends attachment-only messages with sanitized context and no filename metada
   expect(native.invoke.mock.calls[0][1].payload).not.toContain('alex@example.com.log');
   expect(native.invoke.mock.calls[0][1].payload).not.toContain('local-file');
 });
+
+it('renders an agent-generated OpenUI text box and prepares a follow-up without auto-sending', async () => {
+  native.invoke.mockResolvedValue(JSON.stringify({text:'Describe what happened.',blocks:[{type:'input',title:'Debug details',placeholder:'Paste a short description',submitLabel:'Use details'}]}));
+  const user=userEvent.setup();render(<AgentChat {...props}/>);
+  await user.click(screen.getByRole('checkbox',{name:'Review before sending'}));
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Show me a text box{Enter}');
+  const field=await screen.findByRole('textbox',{name:'Debug details'});
+  expect((screen.getByRole('button',{name:'Use details'}) as HTMLButtonElement).disabled).toBe(true);
+  await user.type(field,'Timeout for alex@example.com');
+  await user.click(screen.getByRole('button',{name:'Use details'}));
+  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Timeout for alex@example.com');
+  expect(native.invoke).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole('button',{name:'Send'}));
+  expect(native.invoke.mock.calls[1][1].payload).not.toContain('alex@example.com');
+  expect(native.invoke.mock.calls[1][1].payload).toContain('[CHAT_EMAIL_1]');
+});

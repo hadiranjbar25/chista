@@ -41,12 +41,12 @@ export class Sanitizer {
       return typeof value === 'string' ? this.text(value, terms) : value;
     };
     if (format === 'json') return JSON.stringify(visit(JSON.parse(raw)), null, 2);
-    if (format === 'csv') {
-      const parsed = Papa.parse<string[]>(raw, { skipEmptyLines: true });
-      if (parsed.errors.length) throw new Error('Malformed CSV. Check quoting and delimiters.');
+    if (format === 'csv' || format === 'tsv') {
+      const parsed = Papa.parse<string[]>(raw, { skipEmptyLines: true, ...(format === 'tsv' ? {delimiter:'\t'} : {}) });
+      if (parsed.errors.length) throw new Error(`Malformed ${format.toUpperCase()}. Check quoting and delimiters.`);
       const [headers, ...rows] = parsed.data;
-      if (!headers || rows.some(row => row.length !== headers.length)) throw new Error('CSV rows must match the header columns.');
-      return Papa.unparse([headers.map(h => this.text(h, terms)), ...rows.map(row => row.map((v,i) => visit(v, headers[i]))) ]);
+      if (!headers || rows.some(row => row.length !== headers.length)) throw new Error(`${format.toUpperCase()} rows must match the header columns.`);
+      return Papa.unparse([headers.map(h => this.text(h, terms)), ...rows.map(row => row.map((v,i) => visit(v, headers[i]))) ], {delimiter:format === 'tsv' ? '\t' : ','});
     }
     return this.text(raw, terms);
   }

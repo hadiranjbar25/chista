@@ -12,3 +12,14 @@ describe('local safety pipeline', () => {
  it('exports only selected sanitized content with generic names and a strict content budget', () => {const files=sanitizeArtifacts([file('email=a@example.com\n'.repeat(20)),{...file('DO_NOT_EXPORT'),selected:false}],new Sanitizer(),[]);const result=compact(files,20);expect(result).not.toContain('a@example.com');expect(result).not.toContain('private@example.com');expect(result).not.toContain('DO_NOT_EXPORT');expect(JSON.parse(result).artifacts[0].content.length).toBeLessThanOrEqual(20);});
  it('keeps placeholders stable on repeated sanitization', () => {const s=new Sanitizer();const first=sanitizeArtifacts([file('a@example.com')],s,[]);expect(sanitizeArtifacts(first,s,[])[0].safe).toBe(first[0].safe);});
 });
+
+it('sanitizes TSV fields consistently and preserves tabs, commas, and quoted multiline cells', () => {
+  const raw='email\tname\tnote\nalex@example.com\tAlex Person\t"first, item\tsecond\nnext line"';
+  const files=sanitizeArtifacts([file('Alex Person alex@example.com'),file(raw,'tsv')],new Sanitizer(),[]);
+  expect(files[1].safe).toContain('email\tname\tnote');
+  expect(files[1].safe).toContain('"first, item\tsecond\nnext line"');
+  for(const entry of files){expect(entry.safe).not.toContain('Alex Person');expect(entry.safe).not.toContain('alex@example.com');expect(entry.safe).toContain('[EMAIL_1]');}
+  expect(compact(files,6000)).toContain('tsv');
+  expect(()=>new Sanitizer().sanitize('a\tb\n1\t2\t3','tsv',[])).toThrow('TSV rows');
+  expect(()=>new Sanitizer().sanitize('a\tb\n"unterminated\t2','tsv',[])).toThrow('Malformed TSV');
+});

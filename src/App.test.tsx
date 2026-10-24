@@ -175,3 +175,18 @@ it('shows failed imports in the composer without attaching raw data', async () =
   expect(screen.queryByRole('button',{name:'Remove attachment broken.json'})).toBeNull();
   expect((screen.getByRole('button',{name:'Send'}) as HTMLButtonElement).disabled).toBe(true);
 });
+
+it('accepts TSV attachments and previews sanitized tab-separated content inline', async () => {
+  const user=userEvent.setup();render(<App/>);
+  await user.click(screen.getByRole('button',{name:'+ Add files'}));
+  const data='email\tstatus\nalex@example.com\ttimeout';
+  const file=new File([data],'events.tsv',{type:'text/tab-separated-values'});
+  Object.defineProperty(file,'text',{value:async()=>data});
+  await user.upload(screen.getByLabelText('Import debug files'),file);
+  await user.click(await screen.findByRole('button',{name:/^events\.tsv/}));
+  const preview=document.querySelector('.attachment-details pre')!;
+  const payload=JSON.parse(preview.textContent!);
+  expect(payload.artifacts[0].content).toContain('[EMAIL_1]\ttimeout');
+  expect(preview.textContent).not.toContain('alex@example.com');
+  expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
+});
