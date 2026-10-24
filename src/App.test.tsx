@@ -136,7 +136,7 @@ it('renames a session in the sidebar, supports cancelling, and keeps sessions se
   expect(screen.getByRole('heading',{name:/Debug session/})).toBeTruthy();
 });
 
-it.each(['+ Add files','Add debug files'])('%s opens the active session picker before navigating', async label => {
+it.each(['+ Add files','Add debug files'])('%s attaches sanitized files in the active chat composer', async label => {
   const user=userEvent.setup();render(<App/>);
   await user.click(screen.getByRole('button',{name:'New session'}));
   const inputs=document.querySelectorAll<HTMLInputElement>('input[type="file"]');
@@ -149,10 +149,29 @@ it.each(['+ Add files','Add debug files'])('%s opens the active session picker b
   const file=new File(['email,status\nalex@example.com,error'],'error.csv',{type:'text/csv'});
   Object.defineProperty(file,'text',{value:async()=> 'email,status\nalex@example.com,error'});
   await user.upload(inputs[1],file);
-  expect(await screen.findByText('1 artifact(s) imported and sanitized locally.')).toBeTruthy();
-  expect(screen.queryByRole('textbox',{name:'Message agent'})).toBeNull();
+  expect(await screen.findByRole('button',{name:'Remove attachment error.csv'})).toBeTruthy();
+  expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
   await user.click(screen.getByRole('button',{name:/^error\.csv/}));
-  expect(screen.getByText('Sanitized preview').nextElementSibling?.textContent).not.toContain('alex@example.com');
+  const preview=document.querySelector('.attachment-details pre')!;
+  expect(preview.textContent).toContain('[EMAIL_1]');
+  expect(preview.textContent).not.toContain('alex@example.com');
+  expect(preview.textContent).not.toContain('error.csv');
   await user.click(screen.getByRole('button',{name:'Debug session 1'}));
-  expect(screen.queryByRole('button',{name:'Remove error.csv'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'Remove attachment error.csv'})).toBeNull();
+  await user.click(screen.getByRole('button',{name:'Debug session 2'}));
+  await user.click(screen.getByRole('button',{name:'Remove attachment error.csv'}));
+  expect(screen.queryByRole('button',{name:'Remove attachment error.csv'})).toBeNull();
+  expect((screen.getByRole('button',{name:'Send'}) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it('shows failed imports in the composer without attaching raw data', async () => {
+  const user=userEvent.setup();render(<App/>);
+  await user.click(screen.getByRole('button',{name:'+ Add files'}));
+  const file=new File(['{broken-json'],'broken.json',{type:'application/json'});
+  Object.defineProperty(file,'text',{value:async()=>'{broken-json'});
+  await user.upload(screen.getByLabelText('Import debug files'),file);
+  expect(await screen.findByRole('alert')).toBeTruthy();
+  expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'Remove attachment broken.json'})).toBeNull();
+  expect((screen.getByRole('button',{name:'Send'}) as HTMLButtonElement).disabled).toBe(true);
 });

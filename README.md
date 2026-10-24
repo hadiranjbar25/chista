@@ -4,7 +4,7 @@
 
 Chista is a desktop chat workspace for debugging with an AI agent. Type in the composer at the bottom; answers appear above it as text and, when useful, generated OpenUI charts, tables and follow-up controls. Start a session and optionally include multiple repos or sanitized debug files.
 
-The sidebar contains recent sessions. The first structured agent response supplies a short session name. Use the pencil beside a session (or double-click its name) to rename it; Enter or moving focus saves, and Escape cancels. Manual names are never replaced by agent suggestions. Plain-text replies keep the placeholder name until you rename it. Settings lives in the top right. **Add files** in chat opens the file picker directly; cancelling leaves chat open, while selecting files opens local import and redaction review. Repo selection and file review open only when you need them; they are not steps you must complete before chatting.
+The sidebar contains recent sessions. The first structured agent response supplies a short session name. Use the pencil beside a session (or double-click its name) to rename it; Enter or moving focus saves, and Escape cancels. Manual names are never replaced by agent suggestions. Plain-text replies keep the placeholder name until you rename it. Settings lives in the top right. **Add files** opens the file picker and attaches locally sanitized files directly in the composer. Click an attachment to preview its sanitized content or remove it with ×. You stay in chat; mappings and advanced redaction controls are optional. Send waits for sanitization and includes only compacted sanitized content, never original filenames or mappings. Repo selection and file review open only when you need them; they are not steps you must complete before chatting.
 
 Redaction happens locally. AI analysis runs through your configured hosted provider or Claude Code. Chista does not run or download a local model.
 
@@ -138,7 +138,7 @@ The app starts with Claude Code selected. Selecting an integration does not send
 
 ### Switch agents
 
-The composer’s **Review before sending** checkbox is enabled by default per session. Uncheck it to send directly with the same local sanitization and native sign-in flow. Recheck it to preview each outgoing message. This preference does not bypass artifact context review or per-tool MCP approval.
+The composer’s **Review before sending** checkbox is enabled by default per session. Uncheck it to send directly with the same local sanitization and native sign-in flow. Recheck it to preview each outgoing message. Chat attachments use this same review preference. Explicit artifact exports still require review, and MCP tools still require per-tool approval.
 
 Use **Chat agent** beside the composer to switch between Claude Code and Codex without leaving your session. **Settings → Models → Active agent** controls the same selection and also offers a configured hosted provider. Switching cancels any active CLI request and revokes pending approval. Your conversation stays in the session; the next preview includes the sanitized history and explicitly names its new destination.
 

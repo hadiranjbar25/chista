@@ -22,3 +22,11 @@ export function renameSession(session: Session, name: string, source: 'agent' | 
   if (!clean || (source === 'agent' && session.nameSource)) return session;
   return { ...session, name: clean, nameSource: source };
 }
+
+// Local display metadata plus sanitized context only; never raw artifact contents.
+export type ChatAttachments = {
+  files: { id: string; name: string; redactions: number }[];
+  context: string | null;
+  busy: boolean;
+  error: string;
+};

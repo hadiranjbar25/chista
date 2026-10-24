@@ -149,3 +149,18 @@ it('takes a sanitized session title from the first agent response only', async (
   await screen.findByText('Next answer');
   expect(onSessionTitle).toHaveBeenCalledTimes(1);
 });
+
+it('sends attachment-only messages with sanitized context and no filename metadata', async () => {
+  native.invoke.mockResolvedValue('{"text":"Checked attachment","blocks":[]}');
+  const context='{"artifacts":[{"id":"artifact-1","excerpt":"[EMAIL_1] timeout"}]}';
+  const attachments={files:[{id:'local-file',name:'alex@example.com.log',redactions:1}],context,busy:false,error:''};
+  const user=userEvent.setup();const view=render(<AgentChat {...props} context={context} attachments={{...attachments,busy:true}}/>);
+  expect((screen.getByRole('button',{name:'Send'}) as HTMLButtonElement).disabled).toBe(true);
+  view.rerender(<AgentChat {...props} context={context} attachments={attachments}/>);
+  await user.click(screen.getByRole('checkbox',{name:'Review before sending'}));
+  await user.click(screen.getByRole('button',{name:'Send'}));
+  expect(await screen.findByText('Checked attachment')).toBeTruthy();
+  expect(native.invoke.mock.calls[0][1].payload).toContain('[EMAIL_1] timeout');
+  expect(native.invoke.mock.calls[0][1].payload).not.toContain('alex@example.com.log');
+  expect(native.invoke.mock.calls[0][1].payload).not.toContain('local-file');
+});
