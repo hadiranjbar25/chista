@@ -10,6 +10,7 @@ The incident is illustrative and labeled on every frame. It follows an access de
 npm run video:studio   # Edit and preview the timeline
 npm run video:render   # Render video/out/chista-access-debugging.mp4
 npm run video:still -- --frame=1750
+npx remotion still video/index.tsx ChistaEndCard video/out/chista-end-card.png
 npm run video:check
 npm run video:verify -- video/out/chista-access-debugging.mp4
 ```
