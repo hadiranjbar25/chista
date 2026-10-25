@@ -31,10 +31,14 @@ describe('conversation workspace',()=>{
     expect(screen.getByRole('link',{name:'✳ chista'})).toBeTruthy();
     expect(within(screen.getByRole('banner')).queryByRole('button')).toBeNull();
     expect(screen.queryByText('Codex · CLI chat')).toBeNull();
+    expect(screen.queryByRole('button',{name:'Add debug files'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'Agent settings'})).toBeNull();
+    expect(screen.getByRole('img',{name:'Chista'})).toBeTruthy();
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Help me investigate{Enter}');
     expect(await screen.findByText(/Codex chat requires the Tauri desktop app/)).toBeTruthy();
     expect(screen.getByRole('log').querySelectorAll('.message')).toHaveLength(0);
-    await user.click(screen.getByRole('button',{name:'Agent settings'}));
+    await user.click(screen.getByRole('button',{name:'Settings'}));
+    await user.click(screen.getByRole('button',{name:'Models'}));
     const selector=screen.getByLabelText('Active agent') as HTMLSelectElement;
     expect(selector.value).toBe('codex');
     expect(Array.from(selector.options).map(o=>o.value)).toEqual(['claude','codex','hosted']);
@@ -45,7 +49,8 @@ describe('conversation workspace',()=>{
     await user.selectOptions(screen.getByRole('combobox',{name:'Chat agent'}),'codex');
     expect((screen.getByRole('combobox',{name:'Chat agent'}) as HTMLSelectElement).value).toBe('codex');
     expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Investigate timeouts');
-    await user.click(screen.getByRole('button',{name:'Agent settings'}));
+    await user.click(screen.getByRole('button',{name:'Settings'}));
+    await user.click(screen.getByRole('button',{name:'Models'}));
     expect((screen.getByLabelText('Active agent') as HTMLSelectElement).value).toBe('codex');
     await user.selectOptions(screen.getByLabelText('Active agent'),'claude');
     await user.click(screen.getByRole('link',{name:'✳ chista'}));
@@ -161,7 +166,7 @@ it('renames a session in the sidebar, supports cancelling, and keeps sessions se
   expect(screen.getByRole('heading',{name:/Debug session/})).toBeTruthy();
 });
 
-it.each(['+ Add files','Add debug files'])('%s attaches sanitized files in the active chat composer', async label => {
+it.each(['+ Add files'])('%s attaches sanitized files in the active chat composer', async label => {
   const user=userEvent.setup();render(<App/>);
   await user.click(screen.getByRole('button',{name:'New session'}));
   const inputs=document.querySelectorAll<HTMLInputElement>('input[type="file"]');
