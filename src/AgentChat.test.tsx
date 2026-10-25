@@ -2,16 +2,16 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
-const native = vi.hoisted(() => ({ invoke: vi.fn(), auth: vi.fn() }));
+const native = vi.hoisted(() => ({ invoke: vi.fn(), auth: vi.fn(), close: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => true,
-  invoke: (command: string, args: unknown) => command.endsWith('_auth_status') ? native.auth(command,args) : native.invoke(command,args),
+  invoke: (command: string, args: unknown) => command==='close_agent_session' ? (native.close(args),Promise.resolve()) : command.endsWith('_auth_status') ? native.auth(command,args) : native.invoke(command,args),
   Channel: class { onmessage: (event: unknown) => void = () => {}; },
 }));
 import AgentChat from './AgentChat';
 import { McpConnections } from './integrations/mcp';
 beforeEach(() => { native.auth.mockResolvedValue(true); });
-afterEach(() => { cleanup(); native.invoke.mockReset(); native.auth.mockReset(); native.auth.mockResolvedValue(true); });
+afterEach(() => { cleanup(); native.invoke.mockReset(); native.close.mockReset(); native.auth.mockReset(); native.auth.mockResolvedValue(true); });
 const props = {
   repositories: [], session: { id: 'session', name: 'Investigation', repoIds: [] },
   context: 'Reviewed evidence: 2 timeouts', mode: 'claude', claudePath: '',
@@ -21,7 +21,8 @@ const props = {
 it.each(['claude','codex'])('%s requires approval and renders generated OpenUI', async agent => {
   let finish!: (text: string) => void;
   native.invoke.mockImplementation((command, args) => {
-    expect(command).toBe(`${agent}_chat`);
+    expect(command).toBe('agent_session_chat');
+    expect(args.agent).toBe(agent);
     args.onEvent.onmessage({ type: 'started' });
     args.onEvent.onmessage({ type: 'delta', text: '{"text":"Two timeouts found' });
     return new Promise(resolve => { finish = resolve; });
@@ -82,7 +83,7 @@ it.each(['claude','codex'])('opens %s native sign-in and resumes the approved me
   expect(await screen.findByText(/Your message will continue automatically/)).toBeTruthy();
   expect(native.invoke.mock.calls.map(c=>c[0])).toEqual([`${agent}_sign_in`]);
   expect(await screen.findByText('Investigation complete', {}, {timeout:4000})).toBeTruthy();
-  expect(native.invoke.mock.calls.map(c=>c[0])).toEqual([`${agent}_sign_in`,`${agent}_chat`]);
+  expect(native.invoke.mock.calls.map(c=>c[0])).toEqual([`${agent}_sign_in`,'agent_session_chat']);
   expect(screen.getByRole('log').querySelectorAll('.message.user')).toHaveLength(1);
 });
 it('stopping sign-in preserves the draft and prevents a deferred send', async () => {
@@ -126,7 +127,8 @@ it.each(['claude','codex'])('%s can skip the preview while still sanitizing, the
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(native.invoke).toHaveBeenCalledTimes(1);
   const [command,args]=native.invoke.mock.calls[0];
-  expect(command).toBe(`${agent}_chat`);
+  expect(command).toBe('agent_session_chat');
+    expect(args.agent).toBe(agent);
   expect(args.payload).not.toContain('alex@example.com');
   expect(args.payload).toContain('[CHAT_EMAIL_1]');
   expect(args.payload).toContain('Reviewed evidence: 2 timeouts');
@@ -196,4 +198,25 @@ it('renders an OpenUI date picker with bounds and prepares the selected date wit
   await user.click(useDate);
   expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Incident date: 2026-10-24');
   expect(native.invoke).toHaveBeenCalledTimes(1);
+});
+
+it.each(['claude','codex'])('%s keeps an idle session for follow-ups and resets on context changes', async agent=>{
+  native.invoke.mockResolvedValue('{"text":"Answer","blocks":[]}');
+  const user=userEvent.setup();const view=render(<AgentChat {...props} mode={agent}/>);
+  await user.click(screen.getByRole('checkbox',{name:'Review before sending'}));
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'First question{Enter}');
+  await screen.findByText('Answer');
+  const first=native.invoke.mock.calls[0][1];
+  expect(first.systemPrompt).toContain('You are Chista');
+  view.rerender(<AgentChat {...props} mode={agent} active={false}/>);
+  view.rerender(<AgentChat {...props} mode={agent}/>);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Follow up{Enter}');
+  expect(native.invoke.mock.calls[1][1]).toEqual(expect.objectContaining({sessionKey:first.sessionKey,systemPrompt:null}));
+  expect(JSON.parse(native.invoke.mock.calls[1][1].payload)).toEqual({messages:[{role:'user',content:'Follow up'}]});
+  view.rerender(<AgentChat {...props} mode={agent} context="Changed evidence"/>);
+  expect(native.close).toHaveBeenCalledWith({sessionKey:first.sessionKey});
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'With new evidence{Enter}');
+  const next=native.invoke.mock.calls[2][1];
+  expect(next.sessionKey).not.toBe(first.sessionKey);expect(next.systemPrompt).toContain('You are Chista');
+  expect(next.payload).toContain('Changed evidence');
 });

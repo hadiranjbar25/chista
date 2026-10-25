@@ -1,4 +1,5 @@
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
+import type { NativeTurn } from './conversation';
 import { hostedBody, type ModelProvider, type ModelRequest } from './providers';
 
 export function claudePayload(request: ModelRequest): string {
@@ -6,13 +7,13 @@ export function claudePayload(request: ModelRequest): string {
 }
 
 type ClaudeEvent = { type: 'started' } | { type: 'delta' | 'replace'; text: string };
-export function claudeProvider(executablePath: string): ModelProvider {
-  return cliProvider('claude', executablePath);
+export function claudeProvider(executablePath: string, turn?: NativeTurn): ModelProvider {
+  return cliProvider('claude', executablePath, turn);
 }
-export function codexProvider(executablePath: string): ModelProvider {
-  return cliProvider('codex', executablePath);
+export function codexProvider(executablePath: string, turn?: NativeTurn): ModelProvider {
+  return cliProvider('codex', executablePath, turn);
 }
-function cliProvider(agent: 'claude' | 'codex', executablePath: string): ModelProvider {
+function cliProvider(agent: 'claude' | 'codex', executablePath: string, turn?: NativeTurn): ModelProvider {
   const label = agent === 'codex' ? 'Codex' : 'Claude Code';
   if (!isTauri()) throw new Error(`${label} chat requires the Tauri desktop app. Browser mode supports local file review only.`);
   return {
@@ -34,7 +35,7 @@ function cliProvider(agent: 'claude' | 'codex', executablePath: string): ModelPr
       };
       signal.addEventListener('abort', cancel, { once: true });
       try {
-        const result = await invoke<string>(`${agent}_chat`, { requestId, executablePath, payload: claudePayload(request), onEvent: events });
+        const result = await invoke<string>(turn ? 'agent_session_chat' : `${agent}_chat`, { requestId, executablePath, ...(turn ? {agent,...turn} : {payload:claudePayload(request)}), onEvent: events });
         signal.throwIfAborted();
         return result;
       } finally {

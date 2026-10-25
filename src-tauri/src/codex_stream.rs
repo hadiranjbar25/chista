@@ -197,7 +197,7 @@ pub(crate) fn run(
     result
 }
 
-fn disabled_servers(config: &Value) -> Result<Value, String> {
+pub(crate) fn disabled_servers(config: &Value) -> Result<Value, String> {
     if !config.is_object() {
         return Err("Cannot verify Codex integration isolation.".into());
     }
@@ -275,20 +275,22 @@ printf '%s\n' '{{"method":"item/agentMessage/delta","params":{{"threadId":"threa
         let (_dir, binary) = fixture("while :; do :; done");
         let cancelled = Arc::new(AtomicBool::new(false));
         let copy = cancelled.clone();
+        let stopped = Arc::new(std::sync::Mutex::new(None));
+        let stop_time = stopped.clone();
         let channel = Channel::new(move |body| {
             if let tauri::ipc::InvokeResponseBody::Json(text) = body {
                 if text.contains("first ") {
+                    *stop_time.lock().unwrap() = Some(Instant::now());
                     copy.store(true, Ordering::SeqCst);
                 }
             }
             Ok(())
         });
-        let started = Instant::now();
         assert_eq!(
             run(binary, "safe".into(), channel, cancelled, vec![]).unwrap_err(),
             "Request cancelled."
         );
-        assert!(started.elapsed() < Duration::from_secs(3));
+        assert!(stopped.lock().unwrap().unwrap().elapsed() < Duration::from_secs(3));
     }
     #[test]
     fn interrupted_stream_is_not_a_complete_answer() {

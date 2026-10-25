@@ -19,8 +19,11 @@ describe('conversation workspace',()=>{
   it('opens a real chat with no demo controls and explains desktop requirements',async()=>{
     const user=userEvent.setup();render(<App/>);
     expect(screen.getByRole('heading',{name:'What are you debugging?'})).toBeTruthy();
-    expect(screen.getByRole('button',{name:'Settings'}).closest('header')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Settings'}).closest('aside')).toBeTruthy();
     expect(screen.queryByRole('button',{name:'Debug this issue'})).toBeNull();
+    expect(screen.getByRole('link',{name:'✳ chista'})).toBeTruthy();
+    expect(within(screen.getByRole('banner')).queryByRole('button')).toBeNull();
+    expect(screen.getByRole('button',{name:'Files & mappings'}).closest('aside')).toBeTruthy();
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Help me investigate{Enter}');
     expect(await screen.findByText(/Codex chat requires the Tauri desktop app/)).toBeTruthy();
     expect(screen.getByRole('log').querySelectorAll('.message')).toHaveLength(0);

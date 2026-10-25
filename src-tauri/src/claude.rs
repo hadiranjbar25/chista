@@ -27,7 +27,7 @@ fn executable(path: &Path) -> bool {
 fn resolve_claude(configured: &str) -> Result<PathBuf, String> {
     resolve_cli(configured, "claude")
 }
-fn resolve_cli(configured: &str, name: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_cli(configured: &str, name: &str) -> Result<PathBuf, String> {
     if !configured.trim().is_empty() {
         let path = PathBuf::from(configured);
         if !path.is_absolute() || !executable(&path) {
@@ -310,7 +310,7 @@ mod tests {
 // Each request owns its subprocess and IPC channel. No repository or raw-file argument.
 #[derive(Default, Clone)]
 pub struct ChatProcesses(
-    std::sync::Arc<
+    pub(crate)  std::sync::Arc<
         std::sync::Mutex<
             std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>,
         >,
@@ -539,7 +539,7 @@ fn run_chat(
     run_agent_chat(binary, payload, channel, cancelled, Agent::Claude)
 }
 
-fn codex_config_args() -> Vec<&'static str> {
+pub(crate) fn codex_config_args() -> Vec<&'static str> {
     vec![
         "-c",
         "approval_policy=\"never\"",
@@ -586,7 +586,7 @@ fn codex_config_args() -> Vec<&'static str> {
     ]
 }
 
-fn claude_failure(event: &serde_json::Value) -> String {
+pub(crate) fn claude_failure(event: &serde_json::Value) -> String {
     // Classify locally; never echo a provider error that might contain supplied context.
     let diagnostic = format!("{} {}", event["result"], event["errors"]).to_lowercase();
     if [
@@ -621,7 +621,7 @@ fn claude_failure(event: &serde_json::Value) -> String {
     }
 }
 
-fn stream_delta(event: &serde_json::Value) -> Option<&str> {
+pub(crate) fn stream_delta(event: &serde_json::Value) -> Option<&str> {
     if event["type"] == "stream_event" && event["event"]["delta"]["type"] == "text_delta" {
         event["event"]["delta"]["text"].as_str()
     } else {

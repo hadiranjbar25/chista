@@ -1,11 +1,26 @@
 mod claude;
 mod codex_stream;
+mod persistent;
+use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .manage(claude::ChatProcesses::default())
+        .manage(persistent::Sessions::default())
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                webview.state::<persistent::Sessions>().close_all();
+            }
+        })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                window.state::<persistent::Sessions>().close_all();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
+            persistent::agent_session_chat,
+            persistent::close_agent_session,
             claude::claude_status,
             claude::claude_auth_status,
             claude::claude_sign_in,
