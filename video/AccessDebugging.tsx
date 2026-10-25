@@ -20,7 +20,7 @@ function Scene({frame,start,end,children}:{frame:number;start:number;end:number;
   if(frame<start || frame>=end)return null;
   const entering=spring({frame:frame-start,fps:30,config:{damping:24,stiffness:105,mass:1.1}});
   const leaving=progress(frame,end-18,18);
-  return <div className="film-scene-layer" style={{opacity:1-leaving,clipPath:`inset(0 0 ${(1-entering)*100}% 0 round 12px)`,transform:`translateY(${(1-entering)*32-leaving*10}px)`,filter:`blur(${leaving*3}px)`}}>{children}</div>;
+  return <div className="film-scene-layer" style={{opacity:1-leaving,clipPath:entering<.999?`inset(0 0 ${(1-entering)*100}% 0 round 12px)`:undefined,transform:`translateY(${(1-entering)*32-leaving*10}px)`,filter:leaving>0?`blur(${leaving*3}px)`:undefined}}>{children}</div>;
 }
 function Opening({frame}:{frame:number}){
   const composing=progress(frame,question.start,42);
