@@ -2,18 +2,42 @@
 
 Chista is a desktop app for investigating bugs with an AI agent. Bring repository context and debug files into a conversation, then explore streamed explanations alongside interactive OpenUI charts, tables, and forms. Use Codex, Claude Code, or a hosted model provider.
 
-```mermaid
-flowchart LR
-    Files --> Redact[Local redaction] --> Agent[AI agent] --> Results[Text + OpenUI]
-```
-
 ## How it works
 
-A **workspace** groups repository folders, context, and debug files. Each **debug session** has its own conversation within that workspace, so you can investigate different issues using the same evidence.
+A **workspace** groups repository folders, context, and debug files. Run separate **debug sessions** in the same workspace to investigate different issues with independent conversations.
 
-Imported files are sanitized on your computer with consistent placeholders. **Files & mappings** lets you inspect the sanitized content and see which values were masked. Select the evidence to include, compact it into context, and optionally preview it before sending it to the agent. Raw imported files and the placeholder mapping stay local.
+```mermaid
+flowchart TB
+    subgraph Desktop["On your computer"]
+        Workspace["Workspace: repos, context and files"] --> Session["Debug session + chat"]
+        Import["Import CSV, TSV, JSON or logs"] --> Redact["Sanitize locally"]
+        Redact --> Artifacts["Sanitized artifacts"]
+        Redact -.-> Mapping["Original ↔ placeholder mapping"]
+        Artifacts --> Compact["Select evidence + compact context"]
+        Session --> Request["Sanitized message + selected context"]
+        Compact --> Request
+        Request --> Preview["Optional request preview"]
+        Results["Streamed text + OpenUI charts, tables and forms"]
+    end
 
-The agent responds with text and can generate interactive UI through OpenUI—for example, an error table, a response chart, or a date picker for a follow-up. CLI agents use their native sign-in. Supported Codex MCP connections can bring external evidence into a session, with approval before each tool runs.
+    Preview --> Agent["AI agent: Codex, Claude Code or hosted provider"]
+    Agent --> Results
+    Results -->|"Follow-up question or form input"| Session
+
+    classDef local fill:#f3eef9,stroke:#aa8bc4,color:#372b44
+    classDef cloud fill:#edf4fa,stroke:#80a6c3,color:#263e50
+    classDef output fill:#edf5ef,stroke:#8bad95,color:#304d38
+    class Workspace,Session,Import,Redact,Artifacts,Mapping,Compact,Request,Preview local
+    class Agent cloud
+    class Results output
+```
+
+1. **Bring the evidence.** Add repo folders in **Workspace config**, start a session, and attach debug files directly in chat. Adding a repository does not upload its contents to the agent.
+2. **Inspect the masking.** Local sanitization replaces detected sensitive values with consistent placeholders, so repeated values remain traceable across artifacts. **Files & mappings** shows the sanitized content and its original-to-placeholder mapping. Inspect these before sharing; pattern matching can miss sensitive values.
+3. **Choose what to send.** Select and compact the relevant sanitized evidence into context. The small **Review before sending** checkbox lets you preview the outgoing request. Raw imported files and mappings stay on your computer; the agent receives the prepared conversation and selected sanitized context.
+4. **Investigate together.** Answers stream into chat and can include OpenUI charts, tables, and forms. Controls such as date pickers prepare a follow-up in the message box; you choose when to send it.
+
+CLI agents use their native sign-in. Supported **Codex MCP** connections can retrieve external evidence: each tool call needs approval, and its result is sanitized before returning to the agent. Tool approval remains required even when request preview is off. See the [installation guide](docs/INSTALL.md) for supported connections and current limits.
 
 ## Install
 
