@@ -2,7 +2,7 @@
 
 90 seconds · 1920 × 1080 · 30 fps · silent MP4.
 
-The pacing uses one-second overlapping transitions, deliberate reading holds, sequential log and permission checks, a separate query/retrieval step, staggered charts, and an unhurried calendar selection.
+A continuous opening leads into masked panel reveals, sequential evidence highlights, animated charts, and a connected finding. Reading holds and an unhurried calendar selection keep each step clear. The log finding has a reserved region above the composer.
 
 The incident is illustrative and labeled on every frame. It follows an access denial through logs, roles and permissions, an approved Datadog lookup, two charts, and a date-picker follow-up. The OpenUI cards reuse Chista's response renderer. The app shell and cursor are animated presentation layers; the calendar popup is drawn for deterministic rendering.
 

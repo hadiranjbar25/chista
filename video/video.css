@@ -2,6 +2,40 @@
 
 .film-chart-grid .bar-row i{transform:scaleX(var(--chart-progress,1));transform-origin:left}.video-ui-roles tbody tr:nth-child(3),.video-ui-roles tbody tr:nth-child(4){background:#fdf9fb}.video-ui-roles tbody tr:nth-child(3) td:last-child,.video-ui-roles tbody tr:nth-child(4) td:last-child{color:#b3839a;font-weight:650}
 
-/* Continuous window, slower overlapping conversation turns, and a persistent
-   trail make the checks read as one investigation instead of separate slides. */
+/* A stable app shell anchors the masked chapter reveals. */
 .film-scene{height:484px;overflow:hidden}.film-scene-layer{position:absolute;inset:0}.film-composer{z-index:3}.film-trail{position:absolute;left:44px;top:88px;height:19px;display:flex;align-items:center;gap:10px}.film-trail>div{display:flex;align-items:center;gap:6px;font-size:9px;color:#c4b8ce}.film-trail>div>span{width:14px;height:14px;border:1px solid #ddd3e7;border-radius:50%;display:grid;place-items:center;font-size:8px}.film-trail>div.active{color:#9a7fb3}.film-trail>div.active>span{background:#f0e9f8;border-color:#cbb9dc}.film-trail>div.complete{color:#8aa694}.film-trail>div.complete>span{background:#edf5ef;border-color:#d4e4da}.film-trail>div>svg{color:#d3c9dc}.film-pending{position:absolute;top:145px;left:24px;right:24px;display:flex;align-items:center;gap:15px;background:white;border:1px solid #e8e0ef;border-radius:11px;padding:23px;color:#a088b4;z-index:2}.film-pending strong{display:block;font-size:16px;font-weight:550;color:#8c739f}.film-pending span{display:block;font-size:12px;color:#b1a3bc;margin-top:8px}.calendar-grid>.hovered{background:#f0e9f8;border:1px solid #d4c6e2;border-radius:8px}
+
+/* Presentation layout reserves space for both the evidence and its finding.
+   The composer always occupies its own region below the content viewport. */
+.film-log-layout{height:calc(100% - 16px);display:grid;grid-template-rows:34px minmax(0,1fr) 78px;gap:12px}
+.film-log-layout .film-evidence-header{margin:0}
+.film-log-layout>.video-ui{min-height:0}
+.film-log-layout .video-ui .agent-reply>.focus-section>.focus-content>p{font-size:16px;margin:0 0 8px}
+.film-log-layout .response-widget{padding:12px 18px;margin:0}
+.film-log-layout .section-heading{margin-bottom:8px}
+.film-log-layout .video-ui th{padding:8px 12px}
+.film-log-layout .video-ui td{padding:10px 12px;font-size:13px}
+.film-log-layout .film-observation{margin:0;padding:14px 18px;box-shadow:0 4px 18px #8e6caf0a}
+.film-welcome{position:relative;padding-top:26px}
+.welcome-mark{display:inline-block}
+.film-opening-card{position:absolute;left:0;right:0;top:230px}
+.film-opening-card .film-request{margin:0 auto}
+.film-writing{display:flex;justify-content:center;align-items:center;gap:7px;position:absolute;top:225px;left:0;right:0;color:#a08eae;font-size:15px}
+.film-writing>span{width:5px;height:5px;background:#b99bd0;border-radius:50%}
+.film-writing>span:last-of-type{margin-right:8px}
+.film-welcome .film-user-message{margin:14px auto 0;max-width:940px;text-align:left;font-size:17px;box-shadow:0 8px 28px #78608c08}
+.film-sent{display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10px;color:#9b86ad;margin-top:7px}
+.film-evidence-chain{display:flex;justify-content:center;gap:100px;margin:0 auto 24px}
+.film-evidence-chain>div{position:relative;display:grid;justify-items:center;gap:5px;width:165px;color:#a38bb7}
+.film-evidence-chain strong{font-size:17px;color:#806491;letter-spacing:-.3px}
+.film-evidence-chain span{font-size:11px;color:#a18eae}
+.film-evidence-chain i{position:absolute;left:160px;top:30px;width:108px;height:1px;background:linear-gradient(90deg,#c0a4d6,#dfd1e9);transform-origin:left}
+.film-conclusion{padding-top:9px}
+.film-conclusion .film-check{width:48px;height:48px;border-radius:16px}
+.film-conclusion .film-check svg{width:28px;height:28px}
+.film-conclusion .finding-label{margin-top:14px}
+.film-conclusion h2{font-size:34px;margin:12px 0}
+.film-conclusion>p{font-size:18px;margin:12px 0;line-height:1.6}
+.film-conclusion .film-next-step{margin-top:20px}
+.film-playhead{position:absolute;bottom:0;left:0;right:0;height:3px;background:#e9e0f0}
+.film-playhead i{display:block;width:100%;height:100%;transform-origin:left;background:linear-gradient(90deg,#bc9cd4,#8c68ae)}
