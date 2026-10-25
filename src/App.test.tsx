@@ -91,18 +91,22 @@ describe('conversation workspace',()=>{
   it('shares workspace repositories across debug sessions',async()=>{
     localStorage.setItem('chista.repositories.v1',JSON.stringify(repos));
     const user=userEvent.setup();render(<App/>);
+    await user.click(screen.getByRole('button',{name:'Switch workspace'}));
     await user.click(screen.getByRole('button',{name:'Workspace config'}));
     await user.click(screen.getByRole('checkbox',{name:'API /repos/api'}));
     await user.click(screen.getByRole('checkbox',{name:'Web /repos/web'}));
     await user.click(screen.getByRole('button',{name:'New session'}));
     expect(screen.queryByRole('checkbox',{name:'API /repos/api'})).toBeNull();
+    await user.click(screen.getByRole('button',{name:'Switch workspace'}));
     await user.click(screen.getByRole('button',{name:'Workspace config'}));
     expect((screen.getByRole('checkbox',{name:'API /repos/api'}) as HTMLInputElement).checked).toBe(true);
     await user.click(screen.getByRole('button',{name:'Debug session 1'}));
+    await user.click(screen.getByRole('button',{name:'Switch workspace'}));
     await user.click(screen.getByRole('button',{name:'Workspace config'}));
     expect(screen.getByText('Included repositories · 2')).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'Settings'}));await user.click(screen.getByRole('button',{name:'Models'}));
     await user.selectOptions(screen.getByLabelText('Active agent'),'claude');await user.click(screen.getByRole('link',{name:'✳ chista'}));
+    await user.click(screen.getByRole('button',{name:'Switch workspace'}));
     await user.click(screen.getByRole('button',{name:'Workspace config'}));
     await user.click(screen.getByRole('checkbox',{name:'Web /repos/web'}));
     expect(screen.getByText('Included repositories · 1')).toBeTruthy();
@@ -114,11 +118,13 @@ describe('conversation workspace',()=>{
     localStorage.setItem('chista.projects.v1',JSON.stringify(repos));const user=userEvent.setup();render(<App/>);
     expect(localStorage.getItem('chista.projects.v1')).toBeNull();
     expect(localStorage.getItem('chista.repositories.v1')).toContain('/repos/api');
+    await user.click(screen.getByRole('button',{name:'Switch workspace'}));
     await user.click(screen.getByRole('button',{name:'Workspace config'}));
     await user.type(screen.getByLabelText('Repository name',{selector:'input:not([aria-label])'}),'Worker');
     await user.type(screen.getByLabelText('Repository directory'),'/repos/worker');await user.click(screen.getByRole('button',{name:'Add repository'}));
     await user.click(screen.getByRole('link',{name:'✳ chista'}));
     expect(screen.queryByRole('button',{name:'Debug session 2'})).toBeNull();
+    await user.click(screen.getByRole('button',{name:'Switch workspace'}));
     await user.click(screen.getByRole('button',{name:'Workspace config'}));
     expect(screen.getByRole('checkbox',{name:'Worker /repos/worker'})).toBeTruthy();
   });
@@ -221,7 +227,7 @@ it('opens Files & mappings directly from the page toolbar', async () => {
 
 it('isolates workspace evidence and drafts while preserving evidence after closing a debug session', async () => {
   const user=userEvent.setup();render(<App/>);
-  const firstWorkspace=(screen.getByLabelText('WORKSPACE') as HTMLSelectElement).value;
+
   const file=new File(['email,status\nalex@example.com,error'],'shared.csv',{type:'text/csv'});
   Object.defineProperty(file,'text',{value:async()=> 'email,status\nalex@example.com,error'});
   await user.click(screen.getByRole('button',{name:'+ Add files'}));
@@ -233,6 +239,7 @@ it('isolates workspace evidence and drafts while preserving evidence after closi
   await clickAction(user,'Close session');
   expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('First investigation');
   expect(screen.getByRole('button',{name:'Remove attachment shared.csv'})).toBeTruthy();
+  await user.click(screen.getByRole('button',{name:'Switch workspace'}));
   await user.click(screen.getByRole('button',{name:'New workspace'}));
   await user.type(screen.getByRole('textbox',{name:'Workspace name'}),'Payments');
   await user.click(screen.getByRole('button',{name:'Create workspace'}));
@@ -241,7 +248,8 @@ it('isolates workspace evidence and drafts while preserving evidence after closi
   await clickAction(user,'Files & mappings');
   await user.click(screen.getByRole('button',{name:'Mappings'}));
   expect(screen.queryByText('alex@example.com')).toBeNull();
-  await user.selectOptions(screen.getByLabelText('WORKSPACE'),firstWorkspace);
+  await user.click(screen.getByRole('button',{name:'Switch workspace'}));
+  await user.click(screen.getByRole('button',{name:'My workspace'}));
   expect(screen.getByRole('button',{name:'Remove attachment shared.csv'})).toBeTruthy();
   expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('First investigation');
   expect(localStorage.getItem('chista.workspaces.v1')).toContain('Payments');
