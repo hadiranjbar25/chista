@@ -102,7 +102,7 @@ Repositories form a shared catalog; each workspace chooses its repos. Debug sess
 | Control | Purpose |
 | --- | --- |
 | **New session / recent sessions** | Start or return to a separate conversation using workspace files and context. |
-| **Workspace config** | Register existing checkouts and choose which ones a workspace includes. |
+| **Workspace config** | Choose a repository folder in the native desktop picker; its folder name is used automatically. Select which repos a workspace includes. |
 | **Files & mappings** | Import, mask and inspect artifacts before handing sanitized context to the agent. |
 | **Top-right Settings → Models** | Choose Claude Code, Codex or a hosted chat provider. |
 | **Settings → MCP** | Configure servers and discover tools; tool controls stay hidden in chat until a server is connected. |

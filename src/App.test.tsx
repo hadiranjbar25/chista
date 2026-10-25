@@ -4,7 +4,9 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { samples } from './test-fixtures';
-beforeEach(()=>localStorage.clear());afterEach(cleanup);
+const folderPicker=vi.hoisted(()=>vi.fn());
+vi.mock('./integrations/repositories',()=>({selectRepositoryFolder:folderPicker}));
+beforeEach(()=>{localStorage.clear();folderPicker.mockReset();folderPicker.mockResolvedValue(null);});afterEach(cleanup);
 async function importEvidence(user: ReturnType<typeof userEvent.setup>) {
   const files=samples.map(sample=>{
     const file=new File([sample.raw],sample.name,{type:'text/plain'});
@@ -120,13 +122,13 @@ describe('conversation workspace',()=>{
     expect(localStorage.getItem('chista.repositories.v1')).toContain('/repos/api');
     await user.click(screen.getByRole('button',{name:'Switch workspace'}));
     await user.click(screen.getByRole('button',{name:'Workspace config'}));
-    await user.type(screen.getByLabelText('Repository name',{selector:'input:not([aria-label])'}),'Worker');
-    await user.type(screen.getByLabelText('Repository directory'),'/repos/worker');await user.click(screen.getByRole('button',{name:'Add repository'}));
+    folderPicker.mockResolvedValueOnce({name:'worker',path:'/repos/worker'});
+    await user.click(screen.getByRole('button',{name:'Choose folder'}));
     await user.click(screen.getByRole('link',{name:'✳ chista'}));
     expect(screen.queryByRole('button',{name:'Debug session 2'})).toBeNull();
     await user.click(screen.getByRole('button',{name:'Switch workspace'}));
     await user.click(screen.getByRole('button',{name:'Workspace config'}));
-    expect(screen.getByRole('checkbox',{name:'Worker /repos/worker'})).toBeTruthy();
+    expect(screen.getByRole('checkbox',{name:'worker /repos/worker'})).toBeTruthy();
   });
   it('previews the exact sanitized hosted request before any remote send',async()=>{
     const user=userEvent.setup();render(<App/>);
@@ -254,4 +256,22 @@ it('isolates workspace evidence and drafts while preserving evidence after closi
   expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('First investigation');
   expect(localStorage.getItem('chista.workspaces.v1')).toContain('Payments');
   expect(JSON.stringify(localStorage)).not.toContain('alex@example.com');
+});
+
+it('cancels folder selection without adding a repo and reuses an existing folder', async () => {
+  localStorage.setItem('chista.repositories.v1',JSON.stringify(repos));
+  const user=userEvent.setup();render(<App/>);
+  await user.click(screen.getByRole('button',{name:'Switch workspace'}));
+  await user.click(screen.getByRole('button',{name:'Workspace config'}));
+  expect(screen.queryByLabelText('Repository directory')).toBeNull();
+  expect(screen.queryByLabelText('Repository name')).toBeNull();
+  await user.click(screen.getByRole('button',{name:'Choose folder'}));
+  expect(screen.getByRole('heading',{name:'Included repositories · 0'})).toBeTruthy();
+  folderPicker.mockResolvedValueOnce({name:'API',path:'/repos/api'});
+  await user.click(screen.getByRole('button',{name:'Choose folder'}));
+  expect(screen.getByRole('heading',{name:'Included repositories · 1'})).toBeTruthy();
+  expect(JSON.parse(localStorage.getItem('chista.repositories.v1')!)).toHaveLength(2);
+  folderPicker.mockRejectedValueOnce(new Error('Picker unavailable'));
+  await user.click(screen.getByRole('button',{name:'Choose folder'}));
+  expect(screen.getByRole('status').textContent).toContain('Picker unavailable');
 });

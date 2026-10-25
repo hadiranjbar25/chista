@@ -1,11 +1,13 @@
 mod claude;
 mod codex_stream;
 mod persistent;
+mod repositories;
 use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(claude::ChatProcesses::default())
         .manage(persistent::Sessions::default())
         .on_page_load(|webview, payload| {
@@ -19,6 +21,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            repositories::select_repository_folder,
             persistent::agent_session_chat,
             persistent::close_agent_session,
             claude::claude_status,
