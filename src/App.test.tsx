@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { samples } from './test-fixtures';
@@ -24,7 +24,7 @@ describe('conversation workspace',()=>{
   it('opens a real chat with no demo controls and explains desktop requirements',async()=>{
     const user=userEvent.setup();render(<App/>);
     expect(screen.getByRole('heading',{name:'What are you debugging?'})).toBeTruthy();
-    expect(screen.getByRole('button',{name:'Settings'}).closest('aside')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Settings'}).closest('.sidebar-footer')).toBeTruthy();
     expect(screen.queryByRole('button',{name:'Debug this issue'})).toBeNull();
     expect(screen.getByRole('link',{name:'✳ chista'})).toBeTruthy();
     expect(within(screen.getByRole('banner')).queryByRole('button')).toBeNull();
@@ -46,7 +46,7 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByRole('button',{name:'Agent settings'}));
     expect((screen.getByLabelText('Active agent') as HTMLSelectElement).value).toBe('codex');
     await user.selectOptions(screen.getByLabelText('Active agent'),'claude');
-    await clickAction(user,'Back to chat');
+    await user.click(screen.getByRole('link',{name:'✳ chista'}));
     expect((screen.getByRole('combobox',{name:'Chat agent'}) as HTMLSelectElement).value).toBe('claude');
   });
   it('keeps artifacts, mappings and conversation scoped to independent sessions',async()=>{
@@ -58,13 +58,14 @@ describe('conversation workspace',()=>{
     expect(within(mapping).getByText('alex@example.com')).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'Settings'}));
     await user.click(screen.getByRole('button',{name:'Models'}));
-    await clickAction(user,'Back to chat');
+    await user.click(screen.getByRole('link',{name:'✳ chista'}));
     await clickAction(user,'Files & mappings');
     expect(screen.getByRole('region',{name:'Local redaction mappings'})).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'New session'}));
     await clickAction(user,'Files & mappings');
     expect(within(screen.getByRole('main')).queryByText('checkout-production.log')).toBeNull();
     await user.click(screen.getByRole('button',{name:'Debug session 1'}));
+    await clickAction(user,'Files & mappings');
     expect(screen.getByRole('region',{name:'Local redaction mappings'})).toBeTruthy();
   });
   it('hands off only a reviewed snapshot and revokes it when evidence changes',async()=>{
@@ -81,7 +82,7 @@ describe('conversation workspace',()=>{
     expect(screen.getByRole('log',{name:'Conversation'}).textContent).not.toContain('alex@example.com');
     await clickAction(user,'Files & mappings');
     await user.click(screen.getByRole('button',{name:'Remove requests.csv'}));
-    await clickAction(user,'Back to chat');
+    await user.click(screen.getByRole('link',{name:'✳ chista'}));
     expect(screen.queryByRole('button',{name:/characters of reviewed context attached/})).toBeNull();
   });
   it('includes multiple repos without making repos own sessions',async()=>{
@@ -95,7 +96,7 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByRole('button',{name:'Debug session 1'}));
     expect(screen.getByText('Included repositories · 2')).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'Settings'}));await user.click(screen.getByRole('button',{name:'Models'}));
-    await user.selectOptions(screen.getByLabelText('Active agent'),'claude');await clickAction(user,'Back to chat');
+    await user.selectOptions(screen.getByLabelText('Active agent'),'claude');await user.click(screen.getByRole('link',{name:'✳ chista'}));
     await user.click(screen.getByRole('checkbox',{name:'Web /repos/web'}));
     expect(screen.getByText('Included repositories · 1')).toBeTruthy();
     await user.click(screen.getByRole('checkbox',{name:'API /repos/api'}));
@@ -109,7 +110,7 @@ describe('conversation workspace',()=>{
     await clickAction(user,'Repos · 0');await user.click(screen.getByRole('button',{name:'Manage repos'}));
     await user.type(screen.getByLabelText('Repository name',{selector:'input:not([aria-label])'}),'Worker');
     await user.type(screen.getByLabelText('Repository directory'),'/repos/worker');await user.click(screen.getByRole('button',{name:'Add repository'}));
-    await clickAction(user,'Back to chat');
+    await user.click(screen.getByRole('link',{name:'✳ chista'}));
     expect(screen.queryByRole('button',{name:'Debug session 2'})).toBeNull();
     expect(screen.getByRole('checkbox',{name:'Worker /repos/worker'})).toBeTruthy();
   });
@@ -119,7 +120,7 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByText('Hosted chat provider',{selector:'strong'}));
     await user.type(screen.getByLabelText('HTTPS endpoint'),'https://provider.example.com/chat');
     await user.type(screen.getByLabelText('Model identifier'),'debug-model');await user.click(screen.getByRole('button',{name:'Use hosted provider'}));
-    await clickAction(user,'Back to chat');
+    await user.click(screen.getByRole('link',{name:'✳ chista'}));
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Check alex@example.com{Enter}');
     const preview=screen.getByRole('dialog',{name:'Approve outgoing request'});
     expect(preview.textContent).not.toContain('alex@example.com');expect(preview.textContent).toContain('[CHAT_EMAIL_1]');expect(preview.textContent).toContain('debug-model');
@@ -196,5 +197,18 @@ it('accepts TSV attachments and previews sanitized tab-separated content inline'
   const payload=JSON.parse(preview.textContent!);
   expect(payload.artifacts[0].content).toContain('[EMAIL_1]\ttimeout');
   expect(preview.textContent).not.toContain('alex@example.com');
+  expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
+});
+
+it('keeps file actions clickable when WebKit blurs without a related target', async () => {
+  const user=userEvent.setup();render(<App/>);
+  const trigger=screen.getByRole('button',{name:'Session actions'});
+  await user.click(trigger);
+  fireEvent.blur(trigger,{relatedTarget:null});
+  expect(trigger.closest('details')!.open).toBe(true);
+  await user.click(screen.getByRole('button',{name:'Files & mappings'}));
+  expect(screen.getByRole('button',{name:'Mappings'})).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'Back to chat'})).toBeNull();
+  await user.click(screen.getByRole('button',{name:'Debug session 1'}));
   expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
 });
