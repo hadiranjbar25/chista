@@ -9,14 +9,13 @@ vi.mock('@tauri-apps/api/core', () => ({
   Channel: class { onmessage: (event: unknown) => void = () => {}; },
 }));
 import AgentChat from './AgentChat';
-import { McpConnections } from './integrations/mcp';
 beforeEach(() => { native.auth.mockResolvedValue(true); });
 afterEach(() => { cleanup(); native.invoke.mockReset(); native.close.mockReset(); native.auth.mockReset(); native.auth.mockResolvedValue(true); });
 const props = {
-  repositories: [], session: { id: 'session', name: 'Investigation', workspaceId: 'workspace' },
+  repositories: [],
   context: 'Reviewed evidence: 2 timeouts', mode: 'claude', claudePath: '',
-  hosted: { endpoint: '', model: '', token: '' }, servers: [], connections: {},
-  mcp: new McpConnections(() => {}), onModelStatus: vi.fn(), onFiles: vi.fn(), onAddFiles: vi.fn(),
+  hosted: { endpoint: '', model: '', token: '' },
+  onModelStatus: vi.fn(), onFiles: vi.fn(), onAddFiles: vi.fn(),
 };
 it.each(['claude','codex'])('%s requires approval and renders generated OpenUI', async agent => {
   let finish!: (text: string) => void;

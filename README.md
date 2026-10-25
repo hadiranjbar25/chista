@@ -69,7 +69,6 @@ Pattern detection can miss sensitive information. Review the output and add cust
 - **Explore the evidence:** compare artifacts and use OpenUI charts, searchable tables and follow-up controls. These views use local heuristics, not AI diagnoses.
 - **Give the agent focused context:** select artifacts, remove duplicate lines, set a content budget and review the exact payload before sharing.
 - **Keep investigations separate:** switch between workspaces without mixing evidence; run multiple debug sessions against shared workspace context with separate chat histories.
-- **Control tool access:** connect MCP servers and approve each tool invocation with its exact arguments. Tool results are not forwarded to a model automatically.
 
 ## Run
 
@@ -105,7 +104,6 @@ Repositories form a shared catalog; each workspace chooses its repos. Debug sess
 | **Workspace config** | Choose a repository folder in the native desktop picker; its folder name is used automatically. Select which repos a workspace includes. |
 | **Files & mappings** | Import, mask and inspect artifacts before handing sanitized context to the agent. |
 | **Top-right Settings → Models** | Choose Claude Code, Codex or a hosted chat provider. |
-| **Settings → MCP** | Configure servers and discover tools; tool controls stay hidden in chat until a server is connected. |
 | **Settings → General** | Review data handling and clear saved repository metadata. |
 
 Only workspace names, repo membership, repository names and directory paths survive app restarts. Previously saved project entries migrate into the repo catalog. Sessions, artifacts, mappings, chat and integration credentials remain in memory.
@@ -138,7 +136,7 @@ The app starts with Claude Code selected. Selecting an integration does not send
 
 ### Switch agents
 
-The composer’s **Review before sending** checkbox is enabled by default per session. Uncheck it to send directly with the same local sanitization and native sign-in flow. Recheck it to preview each outgoing message. Chat attachments use this same review preference. Explicit artifact exports still require review, and MCP tools still require per-tool approval.
+The composer’s **Review before sending** checkbox is enabled by default per session. Uncheck it to send directly with the same local sanitization and native sign-in flow. Recheck it to preview each outgoing message. Chat attachments use this same review preference. Explicit artifact exports still require review.
 
 Use **Chat agent** beside the composer to switch between Claude Code and Codex without leaving your session. **Settings → Models → Active agent** controls the same selection and also offers a configured hosted provider. Switching cancels any active CLI request and revokes pending approval. Your conversation stays in the session; the next preview includes the sanitized history and explicitly names its new destination.
 
@@ -148,7 +146,7 @@ Select **Codex** and check installation in Settings → Models. Detection checks
 
 Each Chista session starts one dedicated `codex app-server --stdio` in an empty temporary directory and reuses native authentication. Chista keeps its ephemeral thread alive across successful turns, forwards `item/agentMessage/delta` notifications immediately and reconciles the final message on completion. It never attaches to a shared daemon or an external thread. The OpenAI cloud provider is selected; the CLI’s configured model is retained.
 
-App-server does not support exec’s `--ignore-user-config`. Instead, Chista explicitly overrides custom instructions and disables shell/image/browser/computer tools, hooks, plugins, apps, MCP server configuration, project instructions and memory injection. The restricted filesystem profile prevents repository access and command network traffic. Chista reads effective configuration before creating the thread and explicitly disables each inherited MCP server; empty configuration alone does not remove inherited entries. Configuration values and credentials are never forwarded to the model. Incoming tool/approval requests are rejected. Only approved sanitized strings go over stdin. MCP calls remain separately approved in Chista. A recent CLI supporting these settings is required; unsupported configurations fail without weaker retries.
+App-server does not support exec’s `--ignore-user-config`. Instead, Chista explicitly overrides custom instructions and disables shell/image/browser/computer tools, hooks, plugins, apps, MCP server configuration, project instructions and memory injection. The restricted filesystem profile prevents repository access and command network traffic. Chista reads effective configuration before creating the thread and explicitly disables each inherited MCP server; empty configuration alone does not remove inherited entries. Configuration values and credentials are never forwarded to the model. Incoming tool/approval requests are rejected. Only approved sanitized strings go over stdin. A recent CLI supporting these settings is required; unsupported configurations fail without weaker retries.
 
 References: [official app-server documentation](https://developers.openai.com/codex/app-server), [configuration reference](https://developers.openai.com/codex/config-reference).
 
@@ -159,7 +157,7 @@ References: [official app-server documentation](https://developers.openai.com/co
 3. Type a message and send it. If **Review before sending** is checked, preview and approve the sanitized payload first. Text streams above the composer; validated structured responses render as interactive OpenUI charts, tables and follow-up controls. Plain-text answers also work.
 4. **Stop**, switching sessions or closing chat cancels the request. Failed requests are not automatically retried or replaced with scripted results.
 
-The bridge keeps a `claude -p --input-format stream-json --output-format stream-json` process alive for each Chista session through a narrow Tauri command. The payload goes over stdin, not shell arguments. Each session uses an empty temporary working directory, safe mode, no built-in or MCP tools, disabled hooks, and no on-disk CLI session persistence. Conversation memory stays in that process; Chista never resumes an unrelated CLI session. Repository files and local redaction mappings are not part of the request. This is evidence-only debugging; autonomous repository edits are not enabled. MCP tools remain separately approved in Chista.
+The bridge keeps a `claude -p --input-format stream-json --output-format stream-json` process alive for each Chista session through a narrow Tauri command. The payload goes over stdin, not shell arguments. Each session uses an empty temporary working directory, safe mode, no built-in or MCP tools, disabled hooks, and no on-disk CLI session persistence. Conversation memory stays in that process; Chista never resumes an unrelated CLI session. Repository files and local redaction mappings are not part of the request. This is evidence-only debugging; autonomous repository edits are not enabled.
 
 A recent Claude Code CLI supporting `--safe-mode` is required. Unsupported flags or missing authentication produce an error; Chista never retries with weaker restrictions. Existing CLI authentication and provider configuration determine the cloud destination. Managed enterprise policies still apply. See the [official CLI reference](https://code.claude.com/docs/en/cli-reference).
 
@@ -179,15 +177,9 @@ This reduces repeated initialization and data sent from Chista to the CLI. The C
 
 For hosted providers, the exact JSON body, including instructions, sanitized history, reviewed context and `stream: true`, is previewed before each send. SSE text chunks render immediately. Endpoints that ignore streaming and return JSON remain compatible but can only display completed text. Structured UI follows the response contract in `src/AgentResponse.tsx`. No tool execution is delegated to model responses. Tokens/configuration remain in memory. Requests have cancellation and a 125-second UI timeout (the Claude subprocess has a 120-second limit). Status distinguishes configured, connecting, last-successful and failed states. There are no background model calls. Browser preview blocks live network integrations and supports local file review only.
 
-## MCP tools
+## Agent tools
 
-MCP connects a session to tools exposed by a configured server. Server setup lives in Settings; tool use lives alongside the session’s agent chat. Each invocation is a separate action that you review and approve.
-
-Uses the official `@modelcontextprotocol/sdk` v1 client and Streamable HTTP transport through Tauri's native HTTP bridge. The SDK handles initialization/version negotiation, initialized notification, session headers, JSON/SSE responses and JSON-RPC calls. Tool discovery is paginated and bounded. Supports HTTPS and loopback HTTP; redirects are disabled. Optional bearer tokens are memory-only. This MVP does not support stdio transport, OAuth authorization flows, resources/prompts UI, automatic tool chaining, or auto-reconnecting after a failed connection.
-
-Create a server in Settings → MCP, then explicitly connect to discover its tools. Within the selected session's Agent chat, expand MCP tools, choose a tool and enter JSON arguments. Chista sanitizes the arguments and previews destination, tool, arguments and session. **Approve once** is bound to that exact call; altered arguments, a different session, denial, disconnect and repeated calls cannot reuse approval. Remote tools may have side effects. Input schemas are displayed; final argument validation is performed by the MCP server. No artifact is attached automatically. Tool results are displayed locally and never added to a model conversation automatically.
-
-MCP configurations and tokens currently last for this app run. Disconnect before changing a token; remove and re-add to change an endpoint. Connection status is updated for connecting, success, transport errors and disconnect. Implementation references: [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk), [Tauri HTTP bridge](https://v2.tauri.app/plugin/http-client/).
+Chista has no separate MCP server settings or manual tool console. Its Claude Code and Codex chat connections keep tools and inherited MCP servers disabled, so raw workspace files and mappings stay outside agent access. Analysis uses the sanitized context you provide.
 
 ## Data boundaries
 
@@ -195,13 +187,13 @@ Raw files, original filenames, placeholder mappings, custom terms, chat history 
 
 ## Validation and current blockers
 
-The frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies, MCP approvals and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
+The frontend tests cover the sanitizer, session isolation, repository membership, exact request previews, OpenUI replies and the Claude bridge’s streaming, cancellation race, failure and browser-mode behavior. `npm run build` verifies TypeScript and bundles the frontend.
 
 Rust/Cargo was found at `~/.cargo/bin`. The Tauri desktop build and Rust tests pass, including real fixture subprocesses for streaming, cancellation and errors. The tests do not contact a cloud model; persistent subprocess fixtures verify two-turn reuse, isolation, cancellation, and cleanup. A missing desktop icon was added so Tauri can compile.
 
 The installed Codex CLI was verified against a localhost mock Responses endpoint with a synthetic prompt; no debug data was sent to an AI service. Two text deltas arrived before turn completion. A further two-turn localhost probe confirmed that one Codex thread retained the previous user message and assistant answer. No file, shell or MCP tools were exposed after explicitly disabling inherited MCP servers for the ephemeral thread. The installed Claude CLI also completed two turns against a localhost mock Anthropic endpoint with dummy credentials, retaining prior user/assistant messages and exposing no tools. Live cloud authentication and generation are not verified.
 
-Claude Code 2.1.309 is installed at `/opt/homebrew/bin/claude`. Its native authentication check reports not signed in; model access remains blocked until you complete Claude’s login flow. Chista checks this before starting inference and reports sign-in, rate-limit, billing and network errors without echoing provider diagnostics. Live hosted-provider and MCP credentials were not provided; those transports are tested with mocks. Local file review needs no credentials. Test fixtures are not bundled into the application.
+Claude Code 2.1.309 is installed at `/opt/homebrew/bin/claude`. Its native authentication check reports not signed in; model access remains blocked until you complete Claude’s login flow. Chista checks this before starting inference and reports sign-in, rate-limit, billing and network errors without echoing provider diagnostics. Live hosted-provider credentials were not provided; that transport is tested with mocks. Local file review needs no credentials. Test fixtures are not bundled into the application.
 
 ### Streaming behavior
 

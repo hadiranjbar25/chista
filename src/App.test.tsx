@@ -39,6 +39,7 @@ describe('conversation workspace',()=>{
     expect(screen.getByRole('log').querySelectorAll('.message')).toHaveLength(0);
     await user.click(screen.getByRole('button',{name:'Settings'}));
     await user.click(screen.getByRole('button',{name:'Models'}));
+    expect(within(screen.getByRole('navigation',{name:'Settings sections'})).getAllByRole('button').map(button=>button.textContent)).toEqual(['General','Models']);
     const selector=screen.getByLabelText('Active agent') as HTMLSelectElement;
     expect(selector.value).toBe('codex');
     expect(Array.from(selector.options).map(o=>o.value)).toEqual(['claude','codex','hosted']);
