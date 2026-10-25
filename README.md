@@ -2,9 +2,9 @@
 
 **Chat about a bug. Get an answer—and an interactive view when it helps.**
 
-Chista is a desktop chat workspace for debugging with an AI agent. Type in the composer at the bottom; answers appear above it as text and, when useful, generated OpenUI charts, tables and follow-up controls. Start a session and optionally include multiple repos or sanitized debug files.
+Chista is a desktop chat workspace for debugging with an AI agent. Type in the composer at the bottom; answers appear above it as text and, when useful, generated OpenUI charts, tables and follow-up controls. Create a workspace with repos, debug files and sanitized context, then run separate debug sessions on that workspace.
 
-The sidebar contains recent sessions. The first structured agent response supplies a short session name. Use the pencil beside a session (or double-click its name) to rename it; Enter or moving focus saves, and Escape cancels. Manual names are never replaced by agent suggestions. Plain-text replies keep the placeholder name until you rename it. Settings sits at the bottom of the sidebar. Select a session or the Chista name to return to chat. Session tools are in the menu beside the session title. **Add files** opens the file picker and attaches locally sanitized files directly in the composer. Click an attachment to preview its sanitized content or remove it with ×. You stay in chat; mappings and advanced redaction controls are optional. Send waits for sanitization and includes only compacted sanitized content, never original filenames or mappings. Repo selection and file review open only when you need them; they are not steps you must complete before chatting.
+The sidebar switches workspaces and lists debug sessions for the selected workspace. New sessions reuse workspace repos, files, mappings and selected context; conversations and drafts remain separate. Closing a session keeps workspace evidence. The first structured agent response supplies a short session name. Use the pencil beside a session (or double-click its name) to rename it; Enter or moving focus saves, and Escape cancels. Manual names are never replaced by agent suggestions. Plain-text replies keep the placeholder name until you rename it. Settings sits at the bottom of the sidebar. Select a session or the Chista name to return to chat. Session tools are in the menu beside the session title. **Add files** opens the file picker and attaches locally sanitized files directly in the composer. Click an attachment to preview its sanitized content or remove it with ×. You stay in chat; mappings and advanced redaction controls are optional. Send waits for sanitization and includes only compacted sanitized content, never original filenames or mappings. Repo selection and file review open only when you need them; they are not steps you must complete before chatting.
 
 Redaction happens locally. AI analysis runs through your configured hosted provider or Claude Code. Chista does not run or download a local model.
 
@@ -14,7 +14,7 @@ Redaction happens locally. AI analysis runs through your configured hosted provi
 
 ```mermaid
 flowchart TD
-    subgraph device ["On your device — Chista session"]
+    subgraph device ["On your device — Chista workspace"]
         raw["Import CSV, TSV, JSON or logs"]
         redact["Redact sensitive values"]
         mapping["Inspect original-to-placeholder mapping"]
@@ -50,7 +50,7 @@ flowchart TD
     style outgoing fill:#E4F2E8,stroke:#6D9D7B
 ```
 
-**The mapping stays on your device.** An agent sees placeholders such as `[EMAIL_1]`, not the original values behind them. The same value gets the same placeholder across a session's artifacts, so the agent can follow relationships between files.
+**The mapping stays on your device.** An agent sees placeholders such as `[EMAIL_1]`, not the original values behind them. The same value gets the same placeholder across a workspace's artifacts, so the agent can follow relationships between files.
 
 For example:
 
@@ -60,15 +60,15 @@ For example:
 
 The Mappings tab lets you look up those placeholders, see where they appear and hide originals on screen. Neither the mapping nor original filenames are included in context exports, hosted requests or the Claude copy action.
 
-Pattern detection can miss sensitive information. Review the output and add custom redactions before approving a handoff. Claude Code runs independently and can access files already in its selected repository under its native permissions; Chista does not send it imported files automatically.
+Pattern detection can miss sensitive information. Review the output and add custom redactions before approving a handoff. Native agent chat runs with tools disabled; Chista sends only sanitized context and never exposes raw imported files.
 
 ## What you can do
 
-- **Investigate across files:** import logs, CSV or TSV request data and JSON configuration into one session, with consistent masking across artifacts.
+- **Investigate across files:** import logs, CSV or TSV request data and JSON configuration into one workspace, with consistent masking across artifacts.
 - **Understand every replacement:** review sanitized previews and search a local mapping of originals, placeholders, occurrence counts and source files.
 - **Explore the evidence:** compare artifacts and use OpenUI charts, searchable tables and follow-up controls. These views use local heuristics, not AI diagnoses.
 - **Give the agent focused context:** select artifacts, remove duplicate lines, set a content budget and review the exact payload before sharing.
-- **Keep investigations separate:** switch between sessions and their included repos without mixing their artifacts, mappings or chat histories.
+- **Keep investigations separate:** switch between workspaces without mixing evidence; run multiple debug sessions against shared workspace context with separate chat histories.
 - **Control tool access:** connect MCP servers and approve each tool invocation with its exact arguments. Tool results are not forwarded to a model automatically.
 
 ## Run
@@ -97,18 +97,18 @@ Start with your own question or import debug files. There are no preloaded incid
 3. **Add context when needed.** Use **Repos** to include one or more registered checkouts. Use **Files & mappings** or **Add files** to import, mask and review debug data.
 4. **Explore the response.** The agent can combine text with OpenUI charts, searchable tables and follow-up buttons. A follow-up fills the composer so you can edit it before sending.
 
-Repositories form a shared catalog; sessions are independent investigations. One repo can be included in several sessions. Including a repo does not read or upload its files. Claude Code launches in one included repo at a time.
+Repositories form a shared catalog; each workspace chooses its repos. Debug sessions belong to a workspace and use its current sanitized context. Including a repo does not read or upload its files. Native agent chat runs in an isolated temporary directory.
 
 | Control | Purpose |
 | --- | --- |
-| **New session / recent sessions** | Start or return to a conversation with isolated artifacts, mappings and history. |
-| **Repos → Manage repos** | Register existing checkouts and choose which ones a session includes. |
+| **New session / recent sessions** | Start or return to a separate conversation using workspace files and context. |
+| **Repos → Manage repos** | Register existing checkouts and choose which ones a workspace includes. |
 | **Files & mappings** | Import, mask and inspect artifacts before handing sanitized context to the agent. |
 | **Top-right Settings → Models** | Choose Claude Code, Codex or a hosted chat provider. |
 | **Settings → MCP** | Configure servers and discover tools; tool controls stay hidden in chat until a server is connected. |
 | **Settings → General** | Review data handling and clear saved repository metadata. |
 
-Only repository names and directory paths survive app restarts. Previously saved project entries migrate into the repo catalog. Sessions, artifacts, mappings, chat and integration credentials remain in memory.
+Only workspace names, repo membership, repository names and directory paths survive app restarts. Previously saved project entries migrate into the repo catalog. Sessions, artifacts, mappings, chat and integration credentials remain in memory.
 
 ## Generated response UI
 
@@ -119,10 +119,10 @@ Charts support selecting categories, tables support searching, and follow-ups po
 ## Safe Debug Sessions
 
 1. Import header-based CSV or TSV, JSON, LOG or TXT; up to 20 artifacts, 2 MB each.
-2. Preview local redactions, optionally reveal originals locally, and add exact custom sensitive values. Consistent placeholders preserve relationships across artifacts. The **Mappings** tab shows original → placeholder pairs, occurrence counts and source artifacts. Search the mapping or hide originals on screen. The mapping stays in the session on this device and is never included in model requests, context exports or the Claude copy action.
+2. Preview local redactions, optionally reveal originals locally, and add exact custom sensitive values. Consistent placeholders preserve relationships across artifacts. The **Mappings** tab shows original → placeholder pairs, occurrence counts and source artifacts. Search the mapping or hide originals on screen. The mapping stays in the workspace on this device and is never included in model requests, context exports or the Claude copy action.
 3. Compare sanitized artifacts by line position. OpenUI renders interactive severity charts, searchable evidence tables and follow-up controls (500 analyzed lines, 100 displayed matching rows).
 4. Select artifacts, compact them, and review the exact JSON snapshot. Duplicate lines are removed; the content budget truncates excerpts and reports omitted characters.
-5. Explicitly acknowledge review before exporting or attaching the snapshot to this session's chat. Attaching opens Agent chat, where the sanitized data can be sent to the configured hosted provider with optional outgoing-request review. Artifact/selection/redaction changes revoke the attachment. Raw files and filenames never enter the provider interface.
+5. Explicitly acknowledge review before exporting or attaching the snapshot to this workspace's debug sessions. Attaching opens Agent chat, where the sanitized data can be sent to the configured hosted provider with optional outgoing-request review. Artifact/selection/redaction changes revoke the attachment. Raw files and filenames never enter the provider interface.
 
 Sanitization detects common secret/PII patterns and sensitive structured fields. It cannot guarantee detection of every secret; inspect the preview and add custom redactions. Chat uses a separate `CHAT_` placeholder namespace to avoid falsely associating a newly typed identity with an artifact placeholder.
 

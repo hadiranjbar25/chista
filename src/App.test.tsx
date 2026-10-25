@@ -49,7 +49,7 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByRole('link',{name:'✳ chista'}));
     expect((screen.getByRole('combobox',{name:'Chat agent'}) as HTMLSelectElement).value).toBe('claude');
   });
-  it('keeps artifacts, mappings and conversation scoped to independent sessions',async()=>{
+  it('shares files and mappings across workspace sessions',async()=>{
     const user=userEvent.setup();render(<App/>);
     await clickAction(user,'Files & mappings');
     await importEvidence(user);
@@ -63,7 +63,7 @@ describe('conversation workspace',()=>{
     expect(screen.getByRole('region',{name:'Local redaction mappings'})).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'New session'}));
     await clickAction(user,'Files & mappings');
-    expect(within(screen.getByRole('main')).queryByText('checkout-production.log')).toBeNull();
+    expect(screen.getByRole('region',{name:'Local redaction mappings'})).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'Debug session 1'}));
     await clickAction(user,'Files & mappings');
     expect(screen.getByRole('region',{name:'Local redaction mappings'})).toBeTruthy();
@@ -80,19 +80,22 @@ describe('conversation workspace',()=>{
     await user.click(within(preview).getByRole('button',{name:'Attach to session chat'}));
     expect(screen.getByRole('button',{name:/characters of reviewed context attached/})).toBeTruthy();
     expect(screen.getByRole('log',{name:'Conversation'}).textContent).not.toContain('alex@example.com');
+    await user.click(screen.getByRole('button',{name:'New session'}));
+    expect(screen.getByRole('button',{name:/characters of reviewed context attached/})).toBeTruthy();
+
     await clickAction(user,'Files & mappings');
     await user.click(screen.getByRole('button',{name:'Remove requests.csv'}));
     await user.click(screen.getByRole('link',{name:'✳ chista'}));
     expect(screen.queryByRole('button',{name:/characters of reviewed context attached/})).toBeNull();
   });
-  it('includes multiple repos without making repos own sessions',async()=>{
+  it('shares workspace repositories across debug sessions',async()=>{
     localStorage.setItem('chista.repositories.v1',JSON.stringify(repos));
     const user=userEvent.setup();render(<App/>);
     await clickAction(user,'Repos · 0');
     await user.click(screen.getByRole('checkbox',{name:'API /repos/api'}));
     await user.click(screen.getByRole('checkbox',{name:'Web /repos/web'}));
     await user.click(screen.getByRole('button',{name:'New session'}));
-    expect((screen.getByRole('checkbox',{name:'API /repos/api'}) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole('checkbox',{name:'API /repos/api'}) as HTMLInputElement).checked).toBe(true);
     await user.click(screen.getByRole('button',{name:'Debug session 1'}));
     expect(screen.getByText('Included repositories · 2')).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'Settings'}));await user.click(screen.getByRole('button',{name:'Models'}));
@@ -149,15 +152,15 @@ it.each(['+ Add files','Add debug files'])('%s attaches sanitized files in the a
   const user=userEvent.setup();render(<App/>);
   await user.click(screen.getByRole('button',{name:'New session'}));
   const inputs=document.querySelectorAll<HTMLInputElement>('input[type="file"]');
-  const first=vi.fn();const second=vi.fn();
-  inputs[0].addEventListener('click',first);inputs[1].addEventListener('click',second);
+  const picker=vi.fn();
+  expect(inputs).toHaveLength(1);inputs[0].addEventListener('click',picker);
   await user.click(screen.getByRole('button',{name:label}));
-  expect(first).not.toHaveBeenCalled();expect(second).toHaveBeenCalledTimes(1);
+  expect(picker).toHaveBeenCalledTimes(1);
   // Cancelling the native picker leaves the conversation visible.
   expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
   const file=new File(['email,status\nalex@example.com,error'],'error.csv',{type:'text/csv'});
   Object.defineProperty(file,'text',{value:async()=> 'email,status\nalex@example.com,error'});
-  await user.upload(inputs[1],file);
+  await user.upload(inputs[0],file);
   expect(await screen.findByRole('button',{name:'Remove attachment error.csv'})).toBeTruthy();
   expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
   await user.click(screen.getByRole('button',{name:/^error\.csv/}));
@@ -166,7 +169,7 @@ it.each(['+ Add files','Add debug files'])('%s attaches sanitized files in the a
   expect(preview.textContent).not.toContain('alex@example.com');
   expect(preview.textContent).not.toContain('error.csv');
   await user.click(screen.getByRole('button',{name:'Debug session 1'}));
-  expect(screen.queryByRole('button',{name:'Remove attachment error.csv'})).toBeNull();
+  expect(screen.getByRole('button',{name:'Remove attachment error.csv'})).toBeTruthy();
   await user.click(screen.getByRole('button',{name:'Debug session 2'}));
   await user.click(screen.getByRole('button',{name:'Remove attachment error.csv'}));
   expect(screen.queryByRole('button',{name:'Remove attachment error.csv'})).toBeNull();
@@ -211,4 +214,33 @@ it('keeps file actions clickable when WebKit blurs without a related target', as
   expect(screen.queryByRole('button',{name:'Back to chat'})).toBeNull();
   await user.click(screen.getByRole('button',{name:'Debug session 1'}));
   expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
+});
+
+it('isolates workspace evidence and drafts while preserving evidence after closing a debug session', async () => {
+  const user=userEvent.setup();render(<App/>);
+  const firstWorkspace=(screen.getByLabelText('WORKSPACE') as HTMLSelectElement).value;
+  const file=new File(['email,status\nalex@example.com,error'],'shared.csv',{type:'text/csv'});
+  Object.defineProperty(file,'text',{value:async()=> 'email,status\nalex@example.com,error'});
+  await user.click(screen.getByRole('button',{name:'+ Add files'}));
+  await user.upload(screen.getByLabelText('Import debug files'),file);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'First investigation');
+  await user.click(screen.getByRole('button',{name:'New session'}));
+  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('');
+  expect(screen.getByRole('button',{name:'Remove attachment shared.csv'})).toBeTruthy();
+  await clickAction(user,'Close session');
+  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('First investigation');
+  expect(screen.getByRole('button',{name:'Remove attachment shared.csv'})).toBeTruthy();
+  await user.click(screen.getByRole('button',{name:'New workspace'}));
+  await user.type(screen.getByRole('textbox',{name:'Workspace name'}),'Payments');
+  await user.click(screen.getByRole('button',{name:'Create workspace'}));
+  expect(screen.queryByRole('button',{name:'Remove attachment shared.csv'})).toBeNull();
+  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('');
+  await clickAction(user,'Files & mappings');
+  await user.click(screen.getByRole('button',{name:'Mappings'}));
+  expect(screen.queryByText('alex@example.com')).toBeNull();
+  await user.selectOptions(screen.getByLabelText('WORKSPACE'),firstWorkspace);
+  expect(screen.getByRole('button',{name:'Remove attachment shared.csv'})).toBeTruthy();
+  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('First investigation');
+  expect(localStorage.getItem('chista.workspaces.v1')).toContain('Payments');
+  expect(JSON.stringify(localStorage)).not.toContain('alex@example.com');
 });

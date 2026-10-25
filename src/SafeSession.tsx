@@ -27,7 +27,7 @@ export default function SafeSession({ ref, onAttachments, onContext, onOpenChat,
   async function importFiles(list: FileList|null, attachToChat = false) {
     if (!list?.length || busy) return; setBusy(true); setError('');
     try {
-      if (files.length + list.length > 20) throw new Error('Use at most 20 artifacts per session.');
+      if (files.length + list.length > 20) throw new Error('Use at most 20 artifacts per workspace.');
       const additions: Artifact[] = [];
       for (const f of Array.from(list)) {
         const format = f.name.split('.').pop()?.toLowerCase() ?? '';

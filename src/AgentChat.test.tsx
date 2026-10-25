@@ -13,7 +13,7 @@ import { McpConnections } from './integrations/mcp';
 beforeEach(() => { native.auth.mockResolvedValue(true); });
 afterEach(() => { cleanup(); native.invoke.mockReset(); native.close.mockReset(); native.auth.mockReset(); native.auth.mockResolvedValue(true); });
 const props = {
-  repositories: [], session: { id: 'session', name: 'Investigation', repoIds: [] },
+  repositories: [], session: { id: 'session', name: 'Investigation', workspaceId: 'workspace' },
   context: 'Reviewed evidence: 2 timeouts', mode: 'claude', claudePath: '',
   hosted: { endpoint: '', model: '', token: '' }, servers: [], connections: {},
   mcp: new McpConnections(() => {}), onModelStatus: vi.fn(), onFiles: vi.fn(), onAddFiles: vi.fn(), onSettings: vi.fn(),
