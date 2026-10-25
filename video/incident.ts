@@ -39,7 +39,9 @@ export const replies:Record<string,AgentReply>={
   ]}]},
   date:{text:'When did this user last have access?',blocks:[{type:'date',title:'Last successful access',min:'2026-10-01',max:'2026-10-31',submitLabel:'Use date'}]},
 };
+// Keep the storyboard on its original 30-frame timebase; sample motion at 60 fps.
 export const fps=30;
+export const renderFps=60;
 export const seconds=(value:number)=>Math.round(value*fps);
 export const chapters=[
   {id:'intro',start:0,end:4,kicker:'CHISTA / SAFE DEBUGGING',title:'Why can’t this user open a file?',caption:'One question. Follow the evidence.'},
@@ -61,6 +63,7 @@ export const beats={
   calendarClose:seconds(80.4),useDate:seconds(81.8),datePrepared:seconds(82.3),
 };
 export const duration=chapters[chapters.length-1].end;
+export const renderDuration=duration*renderFps/fps;
 export function chapterAt(frame:number){return chapters.find(chapter=>frame<chapter.end)??chapters[chapters.length-1];}
 export const cues=[
   {at:0,text:'This user opened the file yesterday. Today, access is denied.'},

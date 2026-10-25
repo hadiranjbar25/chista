@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {responseSchema} from '../src/AgentResponse';
-import {beats,chapterAt,chapters,deniedRequests,duration,incident,replies} from './incident';
+import {beats,chapterAt,chapters,deniedRequests,duration,fps,incident,renderDuration,renderFps,replies} from './incident';
 it('uses valid OpenUI blocks and reconciles chart totals with the illustrative incident',()=>{
   expect(incident.illustrative).toBe(true);
   for(const reply of Object.values(replies))expect(responseSchema.safeParse(reply).success).toBe(true);
@@ -28,4 +28,10 @@ it('leaves time to read checks and makes the query and date actions happen in or
   expect(beats.dateSelect-beats.calendarOpen).toBeGreaterThanOrEqual(4*30);
   expect(beats.useDate).toBeGreaterThan(beats.calendarClose);
   expect(beats.datePrepared).toBeGreaterThan(beats.useDate);
+});
+
+it("samples the same 90-second storyboard at 60 fps",()=>{
+  expect(renderFps).toBe(60);
+  expect(renderDuration).toBe(5400);
+  expect(renderDuration/renderFps).toBe(duration/fps);
 });

@@ -1,8 +1,8 @@
 import type {CSSProperties,ReactNode} from 'react';
-import {AbsoluteFill,Easing,interpolate,spring,useCurrentFrame} from 'remotion';
+import {AbsoluteFill,Easing,interpolate,spring,useCurrentFrame,useVideoConfig} from 'remotion';
 import {Activity,ArrowUp,Check,CheckCircle2,ChevronDown,ChevronLeft,ChevronRight,FileText,FolderOpen,LoaderCircle,LockKeyhole,MousePointer2,Plus,Search,Settings,ShieldCheck} from 'lucide-react';
 import AgentResponse from '../src/AgentResponse';
-import {beats,chapters,cueAt,cues,deniedRequests,duration,incident,replies,seconds} from './incident';
+import {beats,chapters,cueAt,cues,deniedRequests,duration,fps,incident,replies,seconds} from './incident';
 import '../src/styles.css';
 import '../src/workspace.css';
 import './video.css';
@@ -90,7 +90,9 @@ function DateScene({frame}:{frame:number}){
   </div>;
 }
 export function AccessDebugging(){
-  const frame=useCurrentFrame();
+  // All choreography uses the storyboard clock; fractional frames provide
+  // genuine 60 fps sampling without changing the incident pacing.
+  const frame=useCurrentFrame()*fps/useVideoConfig().fps;
   const cue=cueAt(frame);
   const typed=incident.prompt.slice(0,Math.floor(interpolate(frame,[beats.typeStart,beats.typeEnd],[0,incident.prompt.length],clamp)));
   const toolApproval=frame>=beats.approvalOpen&&frame<beats.approvalClose+24;
