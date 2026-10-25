@@ -13,6 +13,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::ipc::Channel;
+#[path = "session_mcp.rs"]
+pub mod mcp;
 
 #[derive(Default, Clone)]
 pub struct Sessions(Arc<Mutex<HashMap<String, Arc<Entry>>>>);
@@ -58,6 +60,7 @@ pub async fn agent_session_chat(
     on_event: Channel<Value>,
     sessions: tauri::State<'_, Sessions>,
     processes: tauri::State<'_, ChatProcesses>,
+    approvals: tauri::State<'_, mcp::Approvals>,
 ) -> Result<String, String> {
     if !["claude", "codex"].contains(&agent.as_str())
         || session_key.is_empty()
@@ -100,6 +103,7 @@ pub async fn agent_session_chat(
             entry
         }
     };
+    let approvals = approvals.inner().clone();
     let cancelled = Arc::new(AtomicBool::new(false));
     let processes = processes.inner().clone();
     {
@@ -139,10 +143,14 @@ pub async fn agent_session_chat(
                     &entry.closed,
                 )?);
             }
-            session
-                .as_mut()
-                .unwrap()
-                .turn(&payload, &on_event, &cancelled, &entry.closed)
+            session.as_mut().unwrap().turn_with_tools(
+                &payload,
+                &on_event,
+                &cancelled,
+                &entry.closed,
+                &approvals,
+                &request_id,
+            )
         })();
         if result.is_err() {
             *session = None;
@@ -282,6 +290,7 @@ struct Session {
     _directory: tempfile::TempDir,
     thread: Option<String>,
     next_id: u64,
+    mcp: Option<mcp::Connector>,
 }
 impl Session {
     fn start(
@@ -325,6 +334,7 @@ impl Session {
                 _directory: directory,
                 thread: None,
                 next_id: 10,
+                mcp: None,
             });
         }
         let file = directory.path().join("instructions.md");
@@ -346,6 +356,7 @@ impl Session {
         pipe.send(json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"chista","version":"0.1.0"},"capabilities":{"experimentalApi":true}}}))?;
         let started = Instant::now();
         let mut total = 0;
+        let mut mcp = None;
         let thread = loop {
             let event = pipe.next(cancelled, closed, started, &mut total)?;
             if pipe.reject_tool(&event)? {
@@ -360,8 +371,15 @@ impl Session {
                     pipe.send(json!({"id":2,"method":"config/read","params":{"cwd":directory.path(),"includeLayers":false}}))?;
                 }
                 Some(2) => {
-                    let config = crate::codex_stream::disabled_servers(&event["result"]["config"])?;
-                    pipe.send(json!({"id":3,"method":"thread/start","params":{"cwd":directory.path(),"ephemeral":true,"approvalPolicy":"never","permissions":"chista","environments":[],"config":config,"baseInstructions":instructions}}))?;
+                    mcp = mcp::Connector::start(
+                        &pipe,
+                        &event["result"]["config"],
+                        directory.path(),
+                        cancelled,
+                        closed,
+                    )?;
+                    let config = mcp::analysis_config(&event["result"]["config"])?;
+                    pipe.send(json!({"id":3,"method":"thread/start","params":{"cwd":directory.path(),"ephemeral":true,"approvalPolicy":"never","permissions":"chista","environments":[],"config":config,"baseInstructions":instructions,"dynamicTools":mcp.as_ref().map(|c|c.definitions()).unwrap_or_default()}}))?;
                 }
                 Some(3) => {
                     break event["result"]["thread"]["id"]
@@ -378,8 +396,10 @@ impl Session {
             _directory: directory,
             thread: Some(thread),
             next_id: 10,
+            mcp,
         })
     }
+    #[cfg(test)]
     fn turn(
         &mut self,
         payload: &str,
@@ -387,8 +407,31 @@ impl Session {
         cancelled: &AtomicBool,
         closed: &AtomicBool,
     ) -> Result<String, String> {
+        self.turn_with_tools(
+            payload,
+            events,
+            cancelled,
+            closed,
+            &mcp::Approvals::default(),
+            "test",
+        )
+    }
+    fn turn_with_tools(
+        &mut self,
+        payload: &str,
+        events: &Channel<Value>,
+        cancelled: &AtomicBool,
+        closed: &AtomicBool,
+        approvals: &mcp::Approvals,
+        request_id: &str,
+    ) -> Result<String, String> {
         if cancelled.load(Ordering::SeqCst) || closed.load(Ordering::SeqCst) {
             return Err("Request cancelled.".into());
+        }
+        if let Some(mcp) = &self.mcp {
+            events
+                .send(json!({"type":"mcp_status","servers":mcp.statuses}))
+                .map_err(|_| "Chat closed.")?;
         }
         let id = self.next_id;
         self.next_id += 1;
@@ -397,11 +440,12 @@ impl Session {
         } else {
             self.pipe.send(json!({"type":"user","message":{"role":"user","content":payload},"parent_tool_use_id":null,"session_id":""}))?;
         }
-        let started = Instant::now();
+        let mut started = Instant::now();
         let mut total = 0;
         let mut text = String::new();
         let mut item = String::new();
         let mut turn_id = String::new();
+        let mut seen_calls = std::collections::HashSet::new();
         loop {
             let event = self.pipe.next(cancelled, closed, started, &mut total)?;
             if self.thread.is_none() {
@@ -424,6 +468,23 @@ impl Session {
                         .ok_or("Agent returned no answer.".into());
                 }
                 continue;
+            }
+            if event["method"] == "item/tool/call"
+                && event["params"]["threadId"].as_str() == self.thread.as_deref()
+                && event["params"]["turnId"].as_str() == Some(&turn_id)
+                && !turn_id.is_empty()
+            {
+                if !seen_calls.insert(event["params"]["callId"].to_string()) {
+                    return Err("Duplicate MCP tool call rejected.".into());
+                }
+                if let Some(mcp) = &self.mcp {
+                    if mcp.call(
+                        &self.pipe, &event, events, approvals, request_id, cancelled, closed,
+                    )? {
+                        started = Instant::now();
+                        continue;
+                    }
+                }
             }
             if self.pipe.reject_tool(&event)? {
                 continue;
@@ -529,7 +590,7 @@ for line in sys.stdin:
  elif f.get('method')=='config/read': emit({'id':f['id'],'result':{'config':{'mcp_servers':{'inherited':{'url':'secret-url'}}}}})
  elif f.get('method')=='thread/start':
   assert f['params']['ephemeral'] and f['params']['baseInstructions']=='FORMAT_ONCE'
-  assert f['params']['config']['mcp_servers']['inherited']=={'enabled':False}
+  assert f['params']['config']['mcp_servers']['inherited']['enabled']==False
   emit({'id':f['id'],'result':{'thread':{'id':'thread'}}})
  elif f.get('method')=='turn/start':
   count+=1

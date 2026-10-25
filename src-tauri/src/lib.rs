@@ -10,6 +10,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(claude::ChatProcesses::default())
         .manage(persistent::Sessions::default())
+        .manage(persistent::mcp::Approvals::default())
         .on_page_load(|webview, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                 webview.state::<persistent::Sessions>().close_all();
@@ -22,6 +23,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             repositories::select_repository_folder,
+            persistent::mcp::respond_agent_tool,
+            claude::codex_mcp_sign_in,
             persistent::agent_session_chat,
             persistent::close_agent_session,
             claude::claude_status,

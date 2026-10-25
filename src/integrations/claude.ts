@@ -1,19 +1,20 @@
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import type { NativeTurn } from './conversation';
+import { handleToolEvent, type ToolEvent, type ToolHooks } from './cliTools';
 import { hostedBody, type ModelProvider, type ModelRequest } from './providers';
 
 export function claudePayload(request: ModelRequest): string {
   return JSON.stringify({ messages: hostedBody('', request).messages }, null, 2);
 }
 
-type ClaudeEvent = { type: 'started' } | { type: 'delta' | 'replace'; text: string };
+type ClaudeEvent = { type: 'started' } | { type: 'delta' | 'replace'; text: string } | ToolEvent;
 export function claudeProvider(executablePath: string, turn?: NativeTurn): ModelProvider {
   return cliProvider('claude', executablePath, turn);
 }
-export function codexProvider(executablePath: string, turn?: NativeTurn): ModelProvider {
-  return cliProvider('codex', executablePath, turn);
+export function codexProvider(executablePath: string, turn?: NativeTurn, tools?: ToolHooks): ModelProvider {
+  return cliProvider('codex', executablePath, turn, tools);
 }
-function cliProvider(agent: 'claude' | 'codex', executablePath: string, turn?: NativeTurn): ModelProvider {
+function cliProvider(agent: 'claude' | 'codex', executablePath: string, turn?: NativeTurn, tools?: ToolHooks): ModelProvider {
   const label = agent === 'codex' ? 'Codex' : 'Claude Code';
   if (!isTauri()) throw new Error(`${label} chat requires the Tauri desktop app. Browser mode supports local file review only.`);
   return {
@@ -30,6 +31,7 @@ function cliProvider(agent: 'claude' | 'codex', executablePath: string, turn?: N
       };
       events.onmessage = event => {
         if (finished) return;
+        if(event.type==='tool_approval'||event.type==='tool_result'||event.type==='mcp_status') {void handleToolEvent(event,tools,signal);return;}
         if (event.type === 'started') { started = true; if (signal.aborted) cancel(); }
         if ((event.type === 'delta' || event.type === 'replace') && !signal.aborted) { text = event.type === 'replace' ? event.text : text + event.text; onText?.(text); }
       };

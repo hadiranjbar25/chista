@@ -219,3 +219,45 @@ it.each(['claude','codex'])('%s keeps an idle session for follow-ups and resets 
   expect(next.sessionKey).not.toBe(first.sessionKey);expect(next.systemPrompt).toContain('You are Chista');
   expect(next.payload).toContain('Changed evidence');
 });
+
+it('reviews sanitized MCP arguments and returns only sanitized tool data to Codex',async()=>{
+  let event!: (event:unknown)=>void;
+  let finish!: (text:string)=>void;
+  native.invoke.mockImplementation((command,args)=>{
+    if(command==='respond_agent_tool')return Promise.resolve();
+    expect(command).toBe('agent_session_chat');
+    event=args.onEvent.onmessage;
+    args.onEvent.onmessage({type:'started'});
+    return new Promise(resolve=>{finish=resolve;});
+  });
+  const user=userEvent.setup();render(<AgentChat {...props} mode="codex"/>);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Search MCP{Enter}');
+  await user.click(screen.getByRole('button',{name:'Approve and send'}));
+  await act(async()=>event({type:'tool_approval',id:'approve-one',server:'rag-e-khab',tool:'search',arguments:{query:'alex@example.com'}}));
+  const dialog=screen.getByRole('dialog',{name:'Approve MCP tool'});
+  expect(dialog.textContent).not.toContain('alex@example.com');
+  expect(dialog.textContent).toContain('[CHAT_EMAIL_1]');
+  await user.click(screen.getByRole('button',{name:'Approve tool once'}));
+  expect(native.invoke).toHaveBeenCalledWith('respond_agent_tool',expect.objectContaining({id:'approve-one',response:{approved:true,arguments:{query:'[CHAT_EMAIL_1]'}}}));
+  await act(async()=>event({type:'tool_result',id:'result-one',result:{content:[{type:'text',text:'alex@example.com'}]}}));
+  const reply=native.invoke.mock.calls.find(([command,args])=>command==='respond_agent_tool'&&args.id==='result-one')![1];
+  expect(reply.response.content).not.toContain('alex@example.com');
+  expect(reply.response.content).toContain('[CHAT_EMAIL_1]');
+  await act(async()=>finish('{"text":"Lookup complete","blocks":[]}'));
+  expect(screen.getByText('Lookup complete')).toBeTruthy();
+});
+
+it('offers native Codex MCP sign-in for unauthenticated servers',async()=>{
+  native.invoke.mockImplementation(async(command,args)=>{
+    if(command==='codex_mcp_sign_in')return 'Complete sign-in in Terminal, then return to Chista.';
+    args.onEvent.onmessage({type:'started'});
+    args.onEvent.onmessage({type:'mcp_status',servers:[{name:'rag-e-khab',authStatus:'notLoggedIn',available:true,failed:false}]});
+    return '{"text":"Server needs sign-in.","blocks":[]}';
+  });
+  const user=userEvent.setup();render(<AgentChat {...props} mode="codex"/>);
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Connect MCP{Enter}');
+  await user.click(screen.getByRole('button',{name:'Approve and send'}));
+  await user.click(await screen.findByRole('button',{name:'Sign in'}));
+  expect(native.invoke).toHaveBeenCalledWith('codex_mcp_sign_in',{executablePath:'',server:'rag-e-khab'});
+  expect(screen.getByRole('status').textContent).toContain('Complete sign-in in Terminal');
+});

@@ -147,12 +147,18 @@ fn launch_sign_in(binary: PathBuf, agent: &str) -> Result<String, String> {
     } else {
         vec!["login"]
     };
+    launch_native_sign_in(binary, &args)
+}
+pub(crate) fn launch_native_sign_in(binary: PathBuf, args: &[&str]) -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
         let command = format!(
             "{} {}",
             shell_quote(&binary.to_string_lossy()),
-            args.join(" ")
+            args.iter()
+                .map(|arg| shell_quote(arg))
+                .collect::<Vec<_>>()
+                .join(" ")
         );
         let script="on run argv\ntell application \"Terminal\"\nactivate\ndo script (item 1 of argv)\nend tell\nend run";
         let result = Command::new("/usr/bin/osascript")
@@ -180,10 +186,26 @@ fn launch_sign_in(binary: PathBuf, agent: &str) -> Result<String, String> {
     {
         let _ = binary;
         Err(format!(
-            "Run {agent} {} in your terminal, then return here.",
+            "Run the CLI sign-in command {} in your terminal, then return here.",
             args.join(" ")
         ))
     }
+}
+
+#[tauri::command]
+pub fn codex_mcp_sign_in(executable_path: String, server: String) -> Result<String, String> {
+    if server.is_empty()
+        || server.len() > 100
+        || !server
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+    {
+        return Err("Invalid MCP server name.".into());
+    }
+    launch_native_sign_in(
+        resolve_cli(&executable_path, "codex")?,
+        &["mcp", "login", &server],
+    )
 }
 
 #[tauri::command]

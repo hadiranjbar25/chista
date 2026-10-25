@@ -34,3 +34,5 @@
 .repository-location{display:flex;flex-direction:column;gap:6px;margin:12px 0;overflow-wrap:anywhere}.repository-location strong{font-size:13px}.repository-location small{font-size:11px;color:#9690a4}
 
 .chat-welcome>p.muted{margin-top:20px}
+
+.mcp-sign-in{font-size:11px;color:#857693;margin:12px 0}.mcp-sign-in>div{display:flex;gap:12px;align-items:center}.mcp-sign-in button{font-size:11px;padding:5px 8px}

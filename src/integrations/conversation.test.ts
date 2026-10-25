@@ -7,7 +7,7 @@ beforeEach(()=>native.invoke.mockReset().mockResolvedValue(undefined));
 it('sends instructions once and previews only the new message for follow-ups',()=>{
   const session=new CliConversation();
   const first=session.prepare('codex','',{messages:[{role:'user',content:'First'}],context:'safe context'});
-  expect(first.systemPrompt).toContain('You are Chista');expect(first.payload).toContain('safe context');
+  expect(first.systemPrompt).toContain('You are Chista');expect(first.systemPrompt).toContain('chista_mcp_catalog');expect(first.payload).toContain('safe context');
   const history:Message[]=[{role:'user',content:'First'},{role:'assistant',content:'Answer'}];
   session.commit(first,history);
   const next=session.prepare('codex','',{messages:[...history,{role:'user',content:'Next'}],context:'safe context'});
@@ -18,6 +18,7 @@ it('isolates sessions and resets when context, instructions or history differ',(
   const one=new CliConversation();const two=new CliConversation();
   const request={messages:[{role:'user' as const,content:'Question'}],context:'context A'};
   const first=one.prepare('claude','',request);const other=two.prepare('claude','',request);
+  expect(first.systemPrompt).toContain('No tools are available');
   expect(other.sessionKey).not.toBe(first.sessionKey);
   one.commit(first,[...request.messages,{role:'assistant',content:'Answer'}]);
   const next=one.prepare('claude','',{...request,context:'context B'});
