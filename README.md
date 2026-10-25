@@ -1,11 +1,19 @@
 # Chista
 
-A desktop AI debugging app with streamed answers and interactive OpenUI charts, tables, and forms. Works with Codex, Claude Code, or a hosted provider.
+Chista is a desktop app for investigating bugs with an AI agent. Bring repository context and debug files into a conversation, then explore streamed explanations alongside interactive OpenUI charts, tables, and forms. Use Codex, Claude Code, or a hosted model provider.
 
 ```mermaid
 flowchart LR
     Files --> Redact[Local redaction] --> Agent[AI agent] --> Results[Text + OpenUI]
 ```
+
+## How it works
+
+A **workspace** groups repository folders, context, and debug files. Each **debug session** has its own conversation within that workspace, so you can investigate different issues using the same evidence.
+
+Imported files are sanitized on your computer with consistent placeholders. **Files & mappings** lets you inspect the sanitized content and see which values were masked. Select the evidence to include, compact it into context, and optionally preview it before sending it to the agent. Raw imported files and the placeholder mapping stay local.
+
+The agent responds with text and can generate interactive UI through OpenUI—for example, an error table, a response chart, or a date picker for a follow-up. CLI agents use their native sign-in. Supported Codex MCP connections can bring external evidence into a session, with approval before each tool runs.
 
 ## Install
 
@@ -21,7 +29,7 @@ Install Codex or Claude Code separately, or configure a hosted provider in **Set
 
 Expand any section with its full-screen icon; Escape restores the layout.
 
-Raw imported files and mappings stay local. Review redactions before sharing. Files and chats are cleared when the app restarts.
+Files and chats are currently cleared when the app restarts. See the [installation guide](docs/INSTALL.md) for platform support and current integration limits.
 
 ## Develop
 
