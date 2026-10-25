@@ -26,3 +26,5 @@
 .workspace-picker{display:flex;flex-direction:column;gap:6px}.workspace-picker>label{font-size:9px;letter-spacing:1px;color:#9690a4}.workspace-picker select{margin:0}.workspace-picker button{font-size:10px;padding:6px;border:0;background:transparent;justify-content:flex-start}.workspace-picker form{display:flex;flex-direction:column;gap:5px}.workspace-picker input{width:100%;min-width:0;font-size:12px;padding:8px}
 
 .menu-group-label{font-size:10px;color:#9690a4;padding:6px 10px;overflow-wrap:anywhere}.session-actions-list>button[aria-label="Close session"]{border-top:1px solid #eee8f8;border-radius:0;margin-top:4px}
+
+.workspace-toolbar>.workspace-files-button{margin-left:auto;flex-shrink:0}.repo-membership{display:flex;align-items:center;gap:8px;font-size:12px;color:#787083;margin-bottom:14px}@media(max-width:750px){.workspace-toolbar{flex-direction:row;align-items:center;flex-wrap:wrap}}

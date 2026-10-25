@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { samples } from './test-fixtures';
@@ -91,15 +91,19 @@ describe('conversation workspace',()=>{
   it('shares workspace repositories across debug sessions',async()=>{
     localStorage.setItem('chista.repositories.v1',JSON.stringify(repos));
     const user=userEvent.setup();render(<App/>);
-    await clickAction(user,'Repos · 0');
+    await user.click(screen.getByRole('button',{name:'Workspace config'}));
     await user.click(screen.getByRole('checkbox',{name:'API /repos/api'}));
     await user.click(screen.getByRole('checkbox',{name:'Web /repos/web'}));
     await user.click(screen.getByRole('button',{name:'New session'}));
+    expect(screen.queryByRole('checkbox',{name:'API /repos/api'})).toBeNull();
+    await user.click(screen.getByRole('button',{name:'Workspace config'}));
     expect((screen.getByRole('checkbox',{name:'API /repos/api'}) as HTMLInputElement).checked).toBe(true);
     await user.click(screen.getByRole('button',{name:'Debug session 1'}));
+    await user.click(screen.getByRole('button',{name:'Workspace config'}));
     expect(screen.getByText('Included repositories · 2')).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'Settings'}));await user.click(screen.getByRole('button',{name:'Models'}));
     await user.selectOptions(screen.getByLabelText('Active agent'),'claude');await user.click(screen.getByRole('link',{name:'✳ chista'}));
+    await user.click(screen.getByRole('button',{name:'Workspace config'}));
     await user.click(screen.getByRole('checkbox',{name:'Web /repos/web'}));
     expect(screen.getByText('Included repositories · 1')).toBeTruthy();
     await user.click(screen.getByRole('checkbox',{name:'API /repos/api'}));
@@ -110,11 +114,12 @@ describe('conversation workspace',()=>{
     localStorage.setItem('chista.projects.v1',JSON.stringify(repos));const user=userEvent.setup();render(<App/>);
     expect(localStorage.getItem('chista.projects.v1')).toBeNull();
     expect(localStorage.getItem('chista.repositories.v1')).toContain('/repos/api');
-    await clickAction(user,'Repos · 0');await user.click(screen.getByRole('button',{name:'Manage repos'}));
+    await user.click(screen.getByRole('button',{name:'Workspace config'}));
     await user.type(screen.getByLabelText('Repository name',{selector:'input:not([aria-label])'}),'Worker');
     await user.type(screen.getByLabelText('Repository directory'),'/repos/worker');await user.click(screen.getByRole('button',{name:'Add repository'}));
     await user.click(screen.getByRole('link',{name:'✳ chista'}));
     expect(screen.queryByRole('button',{name:'Debug session 2'})).toBeNull();
+    await user.click(screen.getByRole('button',{name:'Workspace config'}));
     expect(screen.getByRole('checkbox',{name:'Worker /repos/worker'})).toBeTruthy();
   });
   it('previews the exact sanitized hosted request before any remote send',async()=>{
@@ -203,12 +208,10 @@ it('accepts TSV attachments and previews sanitized tab-separated content inline'
   expect(screen.getByRole('textbox',{name:'Message agent'})).toBeTruthy();
 });
 
-it('keeps file actions clickable when WebKit blurs without a related target', async () => {
+it('opens Files & mappings directly from the page toolbar', async () => {
   const user=userEvent.setup();render(<App/>);
-  const trigger=screen.getByRole('button',{name:'Session actions'});
-  await user.click(trigger);
-  fireEvent.blur(trigger,{relatedTarget:null});
-  expect(trigger.closest('details')!.open).toBe(true);
+  expect(screen.getByRole('button',{name:'Files & mappings'}).closest('.workspace-toolbar')).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'Session actions'})).toBeNull();
   await user.click(screen.getByRole('button',{name:'Files & mappings'}));
   expect(screen.getByRole('button',{name:'Mappings'})).toBeTruthy();
   expect(screen.queryByRole('button',{name:'Back to chat'})).toBeNull();
