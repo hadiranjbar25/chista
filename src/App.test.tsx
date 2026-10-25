@@ -14,6 +14,11 @@ async function importEvidence(user: ReturnType<typeof userEvent.setup>) {
   await user.upload(screen.getByLabelText('Import debug files'),files);
   expect(await screen.findByText('3 artifact(s) imported and sanitized locally.')).toBeTruthy();
 }
+async function clickAction(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const action=screen.queryByRole('button',{name});
+  if(!action) await user.click(screen.getByRole('button',{name:'Session actions'}));
+  await user.click(screen.getByRole('button',{name}));
+}
 const repos=[{id:'api',name:'API',path:'/repos/api'},{id:'web',name:'Web',path:'/repos/web'}];
 describe('conversation workspace',()=>{
   it('opens a real chat with no demo controls and explains desktop requirements',async()=>{
@@ -23,7 +28,7 @@ describe('conversation workspace',()=>{
     expect(screen.queryByRole('button',{name:'Debug this issue'})).toBeNull();
     expect(screen.getByRole('link',{name:'✳ chista'})).toBeTruthy();
     expect(within(screen.getByRole('banner')).queryByRole('button')).toBeNull();
-    expect(screen.getByRole('button',{name:'Files & mappings'}).closest('aside')).toBeTruthy();
+    expect(screen.queryByText('Codex · CLI chat')).toBeNull();
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Help me investigate{Enter}');
     expect(await screen.findByText(/Codex chat requires the Tauri desktop app/)).toBeTruthy();
     expect(screen.getByRole('log').querySelectorAll('.message')).toHaveLength(0);
@@ -36,35 +41,35 @@ describe('conversation workspace',()=>{
     const user=userEvent.setup();render(<App/>);
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Investigate timeouts');
     await user.selectOptions(screen.getByRole('combobox',{name:'Chat agent'}),'codex');
-    expect(screen.getByText('Codex · CLI chat')).toBeTruthy();
+    expect((screen.getByRole('combobox',{name:'Chat agent'}) as HTMLSelectElement).value).toBe('codex');
     expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Investigate timeouts');
     await user.click(screen.getByRole('button',{name:'Agent settings'}));
     expect((screen.getByLabelText('Active agent') as HTMLSelectElement).value).toBe('codex');
     await user.selectOptions(screen.getByLabelText('Active agent'),'claude');
-    await user.click(screen.getByRole('button',{name:'Back to chat'}));
+    await clickAction(user,'Back to chat');
     expect((screen.getByRole('combobox',{name:'Chat agent'}) as HTMLSelectElement).value).toBe('claude');
   });
   it('keeps artifacts, mappings and conversation scoped to independent sessions',async()=>{
     const user=userEvent.setup();render(<App/>);
-    await user.click(screen.getByRole('button',{name:'Files & mappings'}));
+    await clickAction(user,'Files & mappings');
     await importEvidence(user);
     await user.click(screen.getByRole('button',{name:'Mappings'}));
     const mapping=screen.getByRole('region',{name:'Local redaction mappings'});
     expect(within(mapping).getByText('alex@example.com')).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'Settings'}));
     await user.click(screen.getByRole('button',{name:'Models'}));
-    await user.click(screen.getByRole('button',{name:'Back to chat'}));
-    await user.click(screen.getByRole('button',{name:'Files & mappings'}));
+    await clickAction(user,'Back to chat');
+    await clickAction(user,'Files & mappings');
     expect(screen.getByRole('region',{name:'Local redaction mappings'})).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'New session'}));
-    await user.click(screen.getByRole('button',{name:'Files & mappings'}));
+    await clickAction(user,'Files & mappings');
     expect(within(screen.getByRole('main')).queryByText('checkout-production.log')).toBeNull();
     await user.click(screen.getByRole('button',{name:'Debug session 1'}));
     expect(screen.getByRole('region',{name:'Local redaction mappings'})).toBeTruthy();
   });
   it('hands off only a reviewed snapshot and revokes it when evidence changes',async()=>{
     const user=userEvent.setup();render(<App/>);
-    await user.click(screen.getByRole('button',{name:'Files & mappings'}));
+    await clickAction(user,'Files & mappings');
     await importEvidence(user);
     await user.click(screen.getByRole('button',{name:'Prepare context'}));
     const preview=screen.getByRole('dialog',{name:'Review context before export'});
@@ -74,15 +79,15 @@ describe('conversation workspace',()=>{
     await user.click(within(preview).getByRole('button',{name:'Attach to session chat'}));
     expect(screen.getByRole('button',{name:/characters of reviewed context attached/})).toBeTruthy();
     expect(screen.getByRole('log',{name:'Conversation'}).textContent).not.toContain('alex@example.com');
-    await user.click(screen.getByRole('button',{name:'Files & mappings'}));
+    await clickAction(user,'Files & mappings');
     await user.click(screen.getByRole('button',{name:'Remove requests.csv'}));
-    await user.click(screen.getByRole('button',{name:'Back to chat'}));
+    await clickAction(user,'Back to chat');
     expect(screen.queryByRole('button',{name:/characters of reviewed context attached/})).toBeNull();
   });
   it('includes multiple repos without making repos own sessions',async()=>{
     localStorage.setItem('chista.repositories.v1',JSON.stringify(repos));
     const user=userEvent.setup();render(<App/>);
-    await user.click(screen.getByRole('button',{name:'Repos · 0'}));
+    await clickAction(user,'Repos · 0');
     await user.click(screen.getByRole('checkbox',{name:'API /repos/api'}));
     await user.click(screen.getByRole('checkbox',{name:'Web /repos/web'}));
     await user.click(screen.getByRole('button',{name:'New session'}));
@@ -90,7 +95,7 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByRole('button',{name:'Debug session 1'}));
     expect(screen.getByText('Included repositories · 2')).toBeTruthy();
     await user.click(screen.getByRole('button',{name:'Settings'}));await user.click(screen.getByRole('button',{name:'Models'}));
-    await user.selectOptions(screen.getByLabelText('Active agent'),'claude');await user.click(screen.getByRole('button',{name:'Back to chat'}));
+    await user.selectOptions(screen.getByLabelText('Active agent'),'claude');await clickAction(user,'Back to chat');
     await user.click(screen.getByRole('checkbox',{name:'Web /repos/web'}));
     expect(screen.getByText('Included repositories · 1')).toBeTruthy();
     await user.click(screen.getByRole('checkbox',{name:'API /repos/api'}));
@@ -101,10 +106,10 @@ describe('conversation workspace',()=>{
     localStorage.setItem('chista.projects.v1',JSON.stringify(repos));const user=userEvent.setup();render(<App/>);
     expect(localStorage.getItem('chista.projects.v1')).toBeNull();
     expect(localStorage.getItem('chista.repositories.v1')).toContain('/repos/api');
-    await user.click(screen.getByRole('button',{name:'Repos · 0'}));await user.click(screen.getByRole('button',{name:'Manage repos'}));
+    await clickAction(user,'Repos · 0');await user.click(screen.getByRole('button',{name:'Manage repos'}));
     await user.type(screen.getByLabelText('Repository name',{selector:'input:not([aria-label])'}),'Worker');
     await user.type(screen.getByLabelText('Repository directory'),'/repos/worker');await user.click(screen.getByRole('button',{name:'Add repository'}));
-    await user.click(screen.getByRole('button',{name:'Back to chat'}));
+    await clickAction(user,'Back to chat');
     expect(screen.queryByRole('button',{name:'Debug session 2'})).toBeNull();
     expect(screen.getByRole('checkbox',{name:'Worker /repos/worker'})).toBeTruthy();
   });
@@ -114,7 +119,7 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByText('Hosted chat provider',{selector:'strong'}));
     await user.type(screen.getByLabelText('HTTPS endpoint'),'https://provider.example.com/chat');
     await user.type(screen.getByLabelText('Model identifier'),'debug-model');await user.click(screen.getByRole('button',{name:'Use hosted provider'}));
-    await user.click(screen.getByRole('button',{name:'Back to chat'}));
+    await clickAction(user,'Back to chat');
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Check alex@example.com{Enter}');
     const preview=screen.getByRole('dialog',{name:'Approve outgoing request'});
     expect(preview.textContent).not.toContain('alex@example.com');expect(preview.textContent).toContain('[CHAT_EMAIL_1]');expect(preview.textContent).toContain('debug-model');
