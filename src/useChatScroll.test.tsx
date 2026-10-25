@@ -62,3 +62,23 @@ it('never scrolls for hidden sessions or their late layout changes', () => {
   // React's hidden session must not affect the active conversation.
   expect(page.scroll).not.toHaveBeenCalled();
 });
+
+it('follows the expanded chat scroll area and pauses when its reader scrolls up', async () => {
+  const page=viewport();
+  const view=render(<div className="focus-section is-fullscreen"><div className="focus-content"><Chat/></div></div>);
+  const frame=document.querySelector<HTMLElement>('.focus-content')!;
+  let height=2400;
+  Object.defineProperty(frame,'scrollHeight',{get:()=>height});
+  Object.defineProperty(frame,'clientHeight',{get:()=>600});
+  const scroll=vi.fn((options:ScrollToOptions)=>{frame.scrollTop=options.top??0;});
+  Object.defineProperty(frame,'scrollTo',{value:scroll,configurable:true});
+  act(()=>window.dispatchEvent(new Event('chista:section-focus')));
+  expect(scroll).toHaveBeenLastCalledWith({top:1800,behavior:'instant'});
+  frame.scrollTop=1200;fireEvent.scroll(frame);
+  expect(screen.getByRole('button')).toBeTruthy();
+  scroll.mockClear();height=2800;page.grow(2800);
+  expect(scroll).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button'));
+  expect(scroll).toHaveBeenLastCalledWith({top:2200,behavior:'instant'});
+  view.unmount();
+});

@@ -32,6 +32,8 @@ npm run tauri dev
 2. Start a **New session** and chat. Codex is the default; switch agents beside the composer or in **Settings → Models**. CLI sign-in opens when needed.
 3. Use **Add files** in the composer to attach debug data. **Files & mappings** opens redaction previews, local mappings, artifact comparison, and context controls.
 
+Use the expand icon on a section or generated UI card to focus on it. Restore the layout with the same icon or Escape.
+
 **Review before sending** is optional. Local sanitization always runs. A hosted provider can be configured in Settings using an HTTPS chat-completions endpoint, model name, and API token.
 
 ## MCP tools
