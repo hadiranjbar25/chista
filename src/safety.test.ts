@@ -23,3 +23,13 @@ it('sanitizes TSV fields consistently and preserves tabs, commas, and quoted mul
   expect(()=>new Sanitizer().sanitize('a\tb\n1\t2\t3','tsv',[])).toThrow('TSV rows');
   expect(()=>new Sanitizer().sanitize('a\tb\n"unterminated\t2','tsv',[])).toThrow('Malformed TSV');
 });
+it('preserves explicit authorization decisions while masking authorization credentials',()=>{
+  const sanitizer=new Sanitizer();
+  const safe=sanitizer.sanitize(JSON.stringify({events:[{authorization:'allowed'},{authorization:'required_group_missing'}],headers:{authorization:'Bearer private-token'},other:{authorization:'Basic dXNlcjpwYXNzd29yZA=='}}),'json',[]);
+  expect(safe).toContain('allowed');expect(safe).toContain('required_group_missing');
+  expect(safe).not.toContain('private-token');expect(safe).not.toContain('dXNlcjpwYXNzd29yZA==');
+  expect(sanitizer.text('status=200 authorization=allowed')).toContain('authorization=allowed');
+  expect(sanitizer.text('status=403 authorization=denied')).toContain('authorization=denied');
+  expect(sanitizer.text('authorization=arbitrary-secret')).not.toContain('arbitrary-secret');
+  expect(sanitizer.text('42 allowed responses')).toBe('42 allowed responses');
+});

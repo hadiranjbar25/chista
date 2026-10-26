@@ -1,0 +1,5 @@
+ILLUSTRATIVE TEST DATA — not a production incident
+2026-10-21T09:58:00Z email=alex@example.com file=doc-42 GET status=200 authentication=succeeded authorization=allowed
+2026-10-22T10:02:00Z email=alex@example.com identity_sync removed_group="Finance Ops"
+2026-10-22T10:05:00Z email=alex@example.com file=doc-42 GET status=403 authentication=succeeded authorization=required_group_missing
+2026-10-22T10:10:00Z email=alex@example.com file=doc-42 GET status=403 authentication=succeeded authorization=required_group_missing

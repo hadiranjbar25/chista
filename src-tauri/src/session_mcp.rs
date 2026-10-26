@@ -253,6 +253,8 @@ impl Connector {
         if call.len() > 200 {
             return Err("Invalid tool call ID.".into());
         }
+        let call_key = format!("{request_id}:{call}");
+        let tool_info = self.tools.get(alias);
         let result = if alias == "chista_mcp_catalog" {
             rpc(
                 pipe,
@@ -268,8 +270,9 @@ impl Connector {
             if !input.is_object() {
                 return Err("MCP arguments must be an object.".into());
             }
-            let approved=approvals.exchange(events,format!("{request_id}:{call}:approve"),json!({"type":"tool_approval","server":tool.server,"tool":tool.name,"arguments":input}),cancelled,closed)?;
+            let approved=approvals.exchange(events,format!("{request_id}:{call}:approve"),json!({"type":"tool_approval","callId":call_key,"server":tool.server,"tool":tool.name,"arguments":input}),cancelled,closed)?;
             if approved["approved"] != true {
+                events.send(json!({"type":"tool_progress","callId":call_key,"server":tool.server,"tool":tool.name,"state":"denied"})).map_err(|_| "Chat closed.")?;
                 return self.finish(
                     pipe,
                     event,
@@ -280,6 +283,7 @@ impl Connector {
             if !approved["arguments"].is_object() {
                 return Err("Invalid approved tool arguments.".into());
             }
+            events.send(json!({"type":"tool_progress","callId":call_key,"server":tool.server,"tool":tool.name,"state":"running"})).map_err(|_| "Chat closed.")?;
             match rpc(
                 pipe,
                 61,
@@ -300,14 +304,19 @@ impl Connector {
         let safe = approvals.exchange(
             events,
             format!("{request_id}:{call}:result"),
-            json!({"type":"tool_result","result":filtered}),
+            json!({"type":"tool_result","callId":call_key,"server":tool_info.map(|tool|&tool.server),"tool":tool_info.map(|tool|&tool.name),"success":success,"result":filtered}),
             cancelled,
             closed,
         )?;
         let content = safe["content"]
             .as_str()
             .ok_or("Sanitized MCP result missing.")?;
-        self.finish(pipe, event, json!({"text":content}), success)
+        self.finish(
+            pipe,
+            event,
+            json!({"text":content}),
+            success && safe["success"] != false,
+        )
     }
     fn finish(
         &self,
@@ -404,7 +413,7 @@ mod tests {
     #[test]
     fn proxy_requires_approval_and_only_returns_sanitized_results_to_analysis() {
         use std::os::unix::fs::PermissionsExt;
-        for allowed in [true, false] {
+        for (allowed, sanitized) in [(true, true), (false, true), (true, false)] {
             let dir = tempfile::tempdir().unwrap();
             let binary = dir.path().join("agent.py");
             let code = r#"#!/usr/bin/env python3
@@ -435,10 +444,22 @@ for line in sys.stdin:
  elif f.get('id')=='call' and 'result' in f:
   assert 'alex@example.com' not in json.dumps(f)
   assert 'BINARY' not in json.dumps(f)
+  assert f['result']['success'] == EXPECTED_SUCCESS
   emit({'method':'item/completed','params':{'threadId':'analysis','turnId':'turn','item':{'type':'agentMessage','text':'Completed'}}})
   emit({'method':'turn/completed','params':{'threadId':'analysis','turn':{'id':'turn','status':'completed'}}})
 "#;
-            std::fs::write(&binary, code).unwrap();
+            std::fs::write(
+                &binary,
+                code.replace(
+                    "EXPECTED_SUCCESS",
+                    if allowed && sanitized {
+                        "True"
+                    } else {
+                        "False"
+                    },
+                ),
+            )
+            .unwrap();
             std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
             let cancelled = AtomicBool::new(false);
             let closed = AtomicBool::new(false);
@@ -447,16 +468,39 @@ for line in sys.stdin:
                     .unwrap();
             let approvals = Approvals::default();
             let copy = approvals.clone();
+            let observed = Arc::new(Mutex::new(Vec::new()));
+            let observed_copy = observed.clone();
             let channel = Channel::new(move |body| {
                 if let tauri::ipc::InvokeResponseBody::Json(text) = body {
                     let event: Value = serde_json::from_str(&text).unwrap();
+                    match event["type"].as_str() {
+                        Some("tool_approval") => {
+                            assert_eq!(event["callId"], "request:lookup");
+                            observed_copy.lock().unwrap().push("approval".to_string());
+                        }
+                        Some("tool_progress") => observed_copy
+                            .lock()
+                            .unwrap()
+                            .push(event["state"].as_str().unwrap().to_string()),
+                        Some("tool_result") => {
+                            assert_eq!(event["server"], "fixture");
+                            assert_eq!(event["tool"], "search");
+                            assert_eq!(event["success"], true);
+                            observed_copy.lock().unwrap().push("result".to_string());
+                        }
+                        _ => {}
+                    }
                     let reply = match event["type"].as_str() {
                         Some("tool_approval") => {
                             Some(json!({"approved":allowed,"arguments":event["arguments"]}))
                         }
                         Some("tool_result") => {
                             assert!(!event.to_string().contains("BINARY"));
-                            Some(json!({"content":"[EMAIL_1]"}))
+                            Some(if sanitized {
+                                json!({"content":"[EMAIL_1]"})
+                            } else {
+                                json!({"content":"MCP result could not be sanitized.","success":false})
+                            })
                         }
                         _ => None,
                     };
@@ -479,6 +523,14 @@ for line in sys.stdin:
                     )
                     .unwrap(),
                 "Completed"
+            );
+            assert_eq!(
+                *observed.lock().unwrap(),
+                if allowed {
+                    vec!["approval", "running", "result"]
+                } else {
+                    vec!["approval", "denied"]
+                }
             );
             drop(session);
             let frames = std::fs::read_to_string(binary.with_extension("frames")).unwrap();

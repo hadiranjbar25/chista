@@ -1,0 +1,12 @@
+{
+  "illustrative": true,
+  "email": "alex@example.com",
+  "file": "doc-42",
+  "date": "2026-10-22",
+  "role": "Viewer",
+  "permissions": ["file:read"],
+  "groups": ["Support"],
+  "requiredGroup": "Finance Ops",
+  "policy": "file:read AND Finance Ops membership",
+  "decision": "deny"
+}

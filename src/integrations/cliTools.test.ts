@@ -29,3 +29,41 @@ it('denies calls on user rejection, cancellation or missing tool handling',async
   await handleToolEvent(event,undefined,new AbortController().signal);
   for(const [,args] of native.invoke.mock.calls)expect(args.response.approved).toBe(false);
 });
+it('records lifecycle and source receipts using the same masking map as imported artifacts',async()=>{
+  const shared=new Sanitizer();
+  const imported=shared.sanitize('{"email":"alex@example.com","name":"Alice Example","user_id":"person-42"}','json',[]);
+  const activity=vi.fn(),evidence=vi.fn();
+  const toolHooks={...hooks(),sanitize:(text:string)=>shared.sanitize(text,'json',[]),activity,evidence};
+  const signal=new AbortController().signal;
+  await handleToolEvent({type:'tool_approval',id:'request:one:approve',callId:'request:one',server:'audit',tool:'access',arguments:{date:'2026-10-22'}},toolHooks,signal);
+  await handleToolEvent({type:'tool_progress',callId:'request:one',server:'audit',tool:'access',state:'running'},toolHooks,signal);
+  await handleToolEvent({type:'tool_result',id:'request:one:result',callId:'request:one',server:'audit',tool:'access',success:true,result:{content:[{type:'text',text:'{"email":"alex@example.com","name":"Alice Example","user_id":"person-42"}'},{type:'image',data:'BINARY'}]}},toolHooks,signal);
+  expect(activity.mock.calls.map(([item])=>item.state)).toEqual(['approval','running','completed']);
+  const source=evidence.mock.calls[0][0];
+  for(const raw of ['alex@example.com','Alice Example','person-42','BINARY'])expect(source.content).not.toContain(raw);
+  expect(source.content).toContain(JSON.parse(imported).email);
+  const receipt=JSON.parse(native.invoke.mock.calls.at(-1)![1].response.content);
+  expect(receipt.sourceId).toBe(source.id);
+  expect(activity.mock.calls.at(-1)![0].sourceId).toBe(source.id);
+});
+it('never records failed or cancelled tool results as successful evidence',async()=>{
+  const activity=vi.fn(),evidence=vi.fn(),controller=new AbortController();
+  const toolHooks={...hooks(),activity,evidence};
+  const event={type:'tool_result' as const,id:'one:result',callId:'one',server:'datadog',tool:'query',success:false,result:{isError:true,content:[{type:'text',text:'Permission denied'}]}};
+  await handleToolEvent(event,toolHooks,controller.signal);
+  expect(activity.mock.calls[0][0].state).toBe('failed');
+  expect(evidence).not.toHaveBeenCalled();
+  controller.abort();
+  await handleToolEvent({...event,success:true},toolHooks,controller.signal);
+  expect(evidence).not.toHaveBeenCalled();
+  expect(activity.mock.calls.at(-1)![0].state).toBe('cancelled');
+});
+it('fails closed if structured text cannot be sanitized',async()=>{
+  const evidence=vi.fn(),activity=vi.fn();
+  const toolHooks={...hooks(),evidence,activity,sanitize:(text:string)=>{if(text.startsWith('{"name"'))throw Error('sanitizer failed');return new Sanitizer().sanitize(text,'json',[]);}};
+  await handleToolEvent({type:'tool_result',id:'one:result',callId:'one',server:'audit',tool:'query',success:true,result:{content:[{type:'text',text:'{"name":"Private Name"}'}]}},toolHooks,new AbortController().signal);
+  expect(evidence).not.toHaveBeenCalled();
+  expect(activity.mock.calls[0][0].state).toBe('failed');
+  expect(native.invoke.mock.calls[0][1].response.success).toBe(false);
+  expect(JSON.stringify(native.invoke.mock.calls)).not.toContain('Private Name');
+});

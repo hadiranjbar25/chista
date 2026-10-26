@@ -145,7 +145,7 @@ describe('conversation workspace',()=>{
     await user.click(screen.getByRole('link',{name:'✳ chista'}));
     await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Check alex@example.com{Enter}');
     const preview=screen.getByRole('dialog',{name:'Approve outgoing request'});
-    expect(preview.textContent).not.toContain('alex@example.com');expect(preview.textContent).toContain('[CHAT_EMAIL_1]');expect(preview.textContent).toContain('debug-model');
+    expect(preview.textContent).not.toContain('alex@example.com');expect(preview.textContent).toContain('[EMAIL_1]');expect(preview.textContent).toContain('debug-model');
     await user.click(within(preview).getByRole('button',{name:'Deny / edit'}));
     expect(screen.queryByRole('dialog')).toBeNull();
   });

@@ -51,6 +51,8 @@ Install Codex or Claude Code separately, or configure a hosted provider in **Set
 2. Start a **debug session** and chat. Sessions share workspace evidence and keep separate conversations.
 3. Attach CSV, TSV, JSON, or logs with **Add files**. Inspect redactions in **Files & mappings**.
 
+Tool activity shows what actually ran; response sources open the sanitized evidence. Completed OpenUI blocks can appear while an answer streams. Follow the [access-investigation guide](docs/INVESTIGATION.md) for a repeatable test incident or your own data.
+
 Expand any section with its full-screen icon; Escape restores the layout.
 
 Files and chats are currently cleared when the app restarts. See the [installation guide](docs/INSTALL.md) for platform support and current integration limits.

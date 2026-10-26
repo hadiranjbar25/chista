@@ -31,7 +31,7 @@ function cliProvider(agent: 'claude' | 'codex', executablePath: string, turn?: N
       };
       events.onmessage = event => {
         if (finished) return;
-        if(event.type==='tool_approval'||event.type==='tool_result'||event.type==='mcp_status') {void handleToolEvent(event,tools,signal);return;}
+        if(event.type==='tool_progress'||event.type==='tool_approval'||event.type==='tool_result'||event.type==='mcp_status') {void handleToolEvent(event,tools,signal);return;}
         if (event.type === 'started') { started = true; if (signal.aborted) cancel(); }
         if ((event.type === 'delta' || event.type === 'replace') && !signal.aborted) { text = event.type === 'replace' ? event.text : text + event.text; onText?.(text); }
       };

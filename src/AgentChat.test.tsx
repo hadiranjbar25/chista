@@ -261,3 +261,77 @@ it('offers native Codex MCP sign-in for unauthenticated servers',async()=>{
   expect(native.invoke).toHaveBeenCalledWith('codex_mcp_sign_in',{executablePath:'',server:'rag-e-khab'});
   expect(screen.getByRole('status').textContent).toContain('Complete sign-in in Terminal');
 });
+
+it('shows complete OpenUI blocks during streaming without enabling follow-up controls early',async()=>{
+  let event!:(value:unknown)=>void,finish!:(value:string)=>void;
+  native.invoke.mockImplementation((_command,args)=>{event=args.onEvent.onmessage;event({type:'started'});return new Promise(resolve=>{finish=resolve;});});
+  const user=userEvent.setup();render(<AgentChat {...props} mode="codex"/>);
+  await user.click(screen.getByRole('checkbox',{name:'Review before sending'}));
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Show observed errors{Enter}');
+  const chart={type:'chart',title:'Live response counts',items:[{label:'Denied',value:14}]};
+  await act(async()=>event({type:'delta',text:`{"text":"Observed denials.","blocks":[${JSON.stringify(chart)},{"type":"date","title":"Last access"`}));
+  expect(await screen.findByRole('heading',{name:'Live response counts'})).toBeTruthy();
+  expect((screen.getByRole('button',{name:'Denied 14'}) as HTMLButtonElement).closest('fieldset')!.disabled).toBe(true);
+  expect(screen.queryByLabelText('Last access')).toBeNull();
+  await act(async()=>finish(JSON.stringify({text:'Observed denials.',blocks:[chart,{type:'date',title:'Last access'}]})));
+  expect(screen.getByLabelText('Last access')).toBeTruthy();
+  expect(screen.queryByRole('group',{name:'Generating interactive response'})).toBeNull();
+});
+
+it('keeps tool evidence, states and cited artifacts attached to their original turn',async()=>{
+  let event!:(value:unknown)=>void,finish!:(value:string)=>void;
+  native.invoke.mockImplementation((command,args)=>{
+    if(command==='respond_agent_tool')return Promise.resolve();
+    event=args.onEvent.onmessage;event({type:'started'});return new Promise(resolve=>{finish=resolve;});
+  });
+  const context=JSON.stringify({mode:'sanitized-context',artifacts:[{artifact:'artifact-1.log',content:'original sanitized evidence',omittedCharacters:0}]});
+  const user=userEvent.setup();const view=render(<AgentChat {...props} context={context} mode="codex"/>);
+  await user.click(screen.getByRole('checkbox',{name:'Review before sending'}));
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Check access{Enter}');
+  await act(async()=>event({type:'tool_approval',id:'call:approve',callId:'call',server:'audit',tool:'access_events',arguments:{date:'2026-10-22'}}));
+  expect(screen.getByText('Awaiting approval')).toBeTruthy();
+  await user.click(screen.getByRole('button',{name:'Approve tool once'}));
+  await act(async()=>event({type:'tool_progress',callId:'call',server:'audit',tool:'access_events',state:'running'}));
+  expect(screen.getByText('Running')).toBeTruthy();
+  await act(async()=>event({type:'tool_result',id:'call:result',callId:'call',server:'audit',tool:'access_events',success:true,result:{content:[{type:'text',text:'alex@example.com status=403'}]}}));
+  const receipt=JSON.parse(native.invoke.mock.calls.find(([command,args])=>command==='respond_agent_tool'&&args.id==='call:result')![1].response.content);
+  expect(screen.getByText('Completed')).toBeTruthy();expect(screen.queryByText('alex@example.com status=403')).toBeNull();
+  await act(async()=>finish(JSON.stringify({text:'Authorization denied.',sources:['artifact-1.log',receipt.sourceId,'made-up-source'],blocks:[]})));
+  expect(screen.getByText('Unavailable source: made-up-source')).toBeTruthy();
+  view.rerender(<AgentChat {...props} context={JSON.stringify({mode:'sanitized-context',artifacts:[{artifact:'artifact-1.log',content:'replacement evidence',omittedCharacters:0}]})} mode="codex"/>);
+  expect(screen.getByText('original sanitized evidence')).toBeTruthy();
+  expect(screen.queryByText('replacement evidence')).toBeNull();
+});
+
+it('retains denied and interrupted calls without claiming they completed',async()=>{
+  let event!:(value:unknown)=>void,reject!:(error:Error)=>void;
+  native.invoke.mockImplementation((command,args)=>{
+    if(command==='respond_agent_tool')return Promise.resolve();
+    if(command==='cancel_agent_chat'){reject(new Error('cancelled'));return Promise.resolve();}
+    event=args.onEvent.onmessage;event({type:'started'});return new Promise((_resolve,fail)=>{reject=fail;});
+  });
+  const user=userEvent.setup();render(<AgentChat {...props} mode="codex"/>);
+  await user.click(screen.getByRole('checkbox',{name:'Review before sending'}));
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Check access{Enter}');
+  await act(async()=>event({type:'tool_approval',id:'one:approve',callId:'one',server:'audit',tool:'access',arguments:{}}));
+  await user.click(screen.getByRole('button',{name:'Deny tool'}));
+  expect(screen.getByText('Denied')).toBeTruthy();
+  await act(async()=>event({type:'tool_progress',callId:'two',server:'datadog',tool:'query',state:'running'}));
+  await user.click(screen.getByRole('button',{name:'Stop'}));
+  expect(await screen.findByText('Cancelled')).toBeTruthy();
+  expect(screen.queryByText('Completed')).toBeNull();
+  expect(screen.getByText('Denied')).toBeTruthy();
+});
+it('preserves a follow-up prepared from an earlier response while the next answer is arriving',async()=>{
+  let finish!:(value:string)=>void;
+  native.invoke.mockResolvedValueOnce(JSON.stringify({text:'Choose a next step.',blocks:[{type:'followups',prompts:['Inspect the earlier day']}]}));
+  const user=userEvent.setup();render(<AgentChat {...props}/>);
+  await user.click(screen.getByRole('checkbox',{name:'Review before sending'}));
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'First question{Enter}');
+  await screen.findByText('Choose a next step.');
+  native.invoke.mockImplementation((_command,args)=>{args.onEvent.onmessage({type:'started'});return new Promise(resolve=>{finish=resolve;});});
+  await user.type(screen.getByRole('textbox',{name:'Message agent'}),'Second question{Enter}');
+  await user.click(screen.getByRole('button',{name:/Inspect the earlier day/}));
+  await act(async()=>finish('{"text":"Second answer","blocks":[]}'));
+  expect((screen.getByRole('textbox',{name:'Message agent'}) as HTMLTextAreaElement).value).toBe('Inspect the earlier day');
+});

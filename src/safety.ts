@@ -1,6 +1,8 @@
 import Papa from 'papaparse';
 export type Artifact = { id: string; name: string; format: string; raw: string; safe: string; redactions: number; selected: boolean };
 const sensitive = /^(password|passwd|secret|token|access_token|refresh_token|api[_-]?key|authorization|cookie|email|phone|ssn|name|full_name|address|ip|user_id)$/i;
+// Authorization decisions are public outcomes, not Authorization credentials.
+const authorizationDecision = /^(allow|allowed|deny|denied|required_group_missing|group_requirement_not_met|insufficient_permissions)$/i;
 export type RedactionMapping = { original: string; placeholder: string };
 export class Sanitizer {
   constructor(private namespace = '') {}
@@ -21,7 +23,7 @@ export class Sanitizer {
     for (const term of terms.filter(Boolean).sort((a,b) => b.length-a.length)) text = text.split(term).join(this.placeholder(term, 'CUSTOM'));
     text = text.replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g, v => this.placeholder(v, 'SECRET'));
     text = text.replace(/\bBearer\s+([\w.\-+/=]+)/gi, (_, v: string) => `Bearer ${this.placeholder(v, 'SECRET')}`);
-    text = text.replace(/\b(password|passwd|secret|token|access_token|refresh_token|api[_-]?key|authorization|cookie|user_id|full_name|name|address|ssn|phone)\s*([=:])\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi, (_, key: string, sep: string, v: string) => `${key}${sep}${this.placeholder(v.replace(/^["']|["']$/g, ''), 'SENSITIVE')}`);
+    text = text.replace(/\b(password|passwd|secret|token|access_token|refresh_token|api[_-]?key|authorization|cookie|user_id|full_name|name|address|ssn|phone)\s*([=:])\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi, (_, key: string, sep: string, v: string) => key.toLowerCase()==='authorization'&&authorizationDecision.test(v.replace(/^["']|["']$/g,''))?`${key}${sep}${v}`:`${key}${sep}${this.placeholder(v.replace(/^["']|["']$/g, ''), 'SENSITIVE')}`);
     text = text.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, v => this.placeholder(v, 'EMAIL'));
     text = text.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, v => this.placeholder(v, 'IP'));
     text = text.replace(/\b(?:sk-[\w-]{8,}|AKIA[A-Z0-9]{16}|eyJ[\w-]+\.[\w-]+\.[\w-]+)\b/g, v => this.placeholder(v, 'SECRET'));
@@ -37,6 +39,7 @@ export class Sanitizer {
       if (value === null) return value;
       if (Array.isArray(value)) return value.map(v => visit(v, key));
       if (typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k,v]) => [this.text(k, terms), visit(v, k)]));
+      if (key.toLowerCase()==='authorization'&&typeof value==='string'&&authorizationDecision.test(value))return this.text(value,terms);
       if (sensitive.test(key)) return this.placeholder(String(value), key.toLowerCase() === 'email' ? 'EMAIL' : 'SENSITIVE');
       return typeof value === 'string' ? this.text(value, terms) : value;
     };
