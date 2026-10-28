@@ -12,11 +12,11 @@ Use this guide to install a packaged app, connect an agent, or build an installe
 
 Copy an installer built for the destination computer's operating system and processor.
 
-| System | Installation |
-| --- | --- |
-| macOS | Open the `.dmg` and drag **Chista** into **Applications**. |
-| Windows | Run the `.exe` installer. |
-| Linux | Install the `.deb` package or run the `.AppImage`. |
+| System  | Installation                                               |
+| ------- | ---------------------------------------------------------- |
+| macOS   | Open the `.dmg` and drag **Chista** into **Applications**. |
+| Windows | Run the `.exe` installer.                                  |
+| Linux   | Install the `.deb` package or run the `.AppImage`.         |
 
 The verified build is currently **macOS on Apple Silicon (M1 or newer)**. Windows, Linux, and Intel Mac builds have not been verified. Prebuilt downloads are not published on GitHub yet.
 
@@ -43,11 +43,11 @@ Build installers on their destination operating system. The Tauri build command 
 
 Install Git, Node.js with npm, and Rust with Cargo through `rustup`. Install the platform dependencies in the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/):
 
-| Build computer | Additional requirements |
-| --- | --- |
-| macOS | Xcode Command Line Tools (`xcode-select --install`), or full Xcode. |
-| Windows | Visual Studio Build Tools with **Desktop development with C++**, Microsoft Edge WebView2, and the Rust MSVC toolchain. |
-| Linux | Your distribution's WebKitGTK and native development packages listed in the Tauri guide. Linux builds have not been verified for Chista. |
+| Build computer | Additional requirements                                                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS          | Xcode Command Line Tools (`xcode-select --install`), or full Xcode.                                                                      |
+| Windows        | Visual Studio Build Tools with **Desktop development with C++**, Microsoft Edge WebView2, and the Rust MSVC toolchain.                   |
+| Linux          | Your distribution's WebKitGTK and native development packages listed in the Tauri guide. Linux builds have not been verified for Chista. |
 
 Check the tools in a new terminal after installation:
 
@@ -72,11 +72,11 @@ If you already have the repository, open its root folder and run `npm ci --ignor
 
 ### Choose a package
 
-| Package | Build on | Command | Output directory |
-| --- | --- | --- | --- |
-| macOS disk image | macOS | `npm run tauri build -- --bundles dmg` | `src-tauri/target/release/bundle/dmg/` |
-| Windows setup executable | Windows | `npm run tauri build -- --bundles nsis` | `src-tauri/target/release/bundle/nsis/` |
-| All configured formats for the host OS | Target OS | `npm run tauri build` | `src-tauri/target/release/bundle/` |
+| Package                                | Build on  | Command                                 | Output directory                        |
+| -------------------------------------- | --------- | --------------------------------------- | --------------------------------------- |
+| macOS disk image                       | macOS     | `npm run tauri build -- --bundles dmg`  | `src-tauri/target/release/bundle/dmg/`  |
+| Windows setup executable               | Windows   | `npm run tauri build -- --bundles nsis` | `src-tauri/target/release/bundle/nsis/` |
+| All configured formats for the host OS | Target OS | `npm run tauri build`                   | `src-tauri/target/release/bundle/`      |
 
 These output paths assume the default Rust target directory and no explicit `--target` option. Share the resulting installer with users; they do not need the source checkout or build tools.
 
@@ -129,25 +129,25 @@ See [Tauri distribution](https://v2.tauri.app/distribute/) for platform packagin
 
 ## Troubleshooting
 
-| Symptom | What to check |
-| --- | --- |
-| `cargo` or `rustc` is not found | Install Rust through `rustup`, then reopen the terminal. |
-| A compiler, linker, or WebKit dependency is missing | Complete the prerequisites for the build computer's OS. On Windows, use the MSVC Rust toolchain and install the C++ workload. |
-| `failed to run light.exe` on Windows | The all-formats build also creates an MSI, which requires the Windows VBSCRIPT optional feature. Use `--bundles nsis` if you only need the `.exe` installer. See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). |
-| No installer appears after `npm run build` | Run the platform's `npm run tauri build` command above to package the desktop app. |
-| macOS blocks first launch | Current builds are unsigned and unnotarized. Public releases need Apple signing and notarization. |
-| The app does not run on an Intel Mac | Use an Intel or universal build; the default Apple Silicon build cannot run on Intel. |
-| An agent CLI is not detected | In **Settings → Models**, enter its absolute executable path and rerun the installation check. |
-| Hosted chat returns an HTTP error | Check the full chat-completions endpoint, model identifier, API token, and provider access. Reenter configuration after restarting Chista. |
-| Repository selection or CLI chat is unavailable in the browser | Open the desktop app. `npm run dev` serves a browser preview for local file review. |
+| Symptom                                                        | What to check                                                                                                                                                                                                                          |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cargo` or `rustc` is not found                                | Install Rust through `rustup`, then reopen the terminal.                                                                                                                                                                               |
+| A compiler, linker, or WebKit dependency is missing            | Complete the prerequisites for the build computer's OS. On Windows, use the MSVC Rust toolchain and install the C++ workload.                                                                                                          |
+| `failed to run light.exe` on Windows                           | The all-formats build also creates an MSI, which requires the Windows VBSCRIPT optional feature. Use `--bundles nsis` if you only need the `.exe` installer. See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). |
+| No installer appears after `npm run build`                     | Run the platform's `npm run tauri build` command above to package the desktop app.                                                                                                                                                     |
+| macOS blocks first launch                                      | Current builds are unsigned and unnotarized. Public releases need Apple signing and notarization.                                                                                                                                      |
+| The app does not run on an Intel Mac                           | Use an Intel or universal build; the default Apple Silicon build cannot run on Intel.                                                                                                                                                  |
+| An agent CLI is not detected                                   | In **Settings → Models**, enter its absolute executable path and rerun the installation check.                                                                                                                                         |
+| Hosted chat returns an HTTP error                              | Check the full chat-completions endpoint, model identifier, API token, and provider access. Reenter configuration after restarting Chista.                                                                                             |
+| Repository selection or CLI chat is unavailable in the browser | Open the desktop app. `npm run dev` serves a browser preview for local file review.                                                                                                                                                    |
 
 ## Data stored on this computer
 
-| Data | After restarting Chista |
-| --- | --- |
-| Workspace definitions, repository names, and directory paths | Restored from local storage on this device. |
-| Imported artifacts, redaction mappings, chat, and selected context | Cleared; these remain in memory during the app run. |
-| Hosted provider configuration and API token | Cleared; configure the provider again. |
-| CLI sign-in and MCP configuration | Managed separately by the installed CLI, outside Chista. |
+| Data                                                               | After restarting Chista                                  |
+| ------------------------------------------------------------------ | -------------------------------------------------------- |
+| Workspace definitions, repository names, and directory paths       | Restored from local storage on this device.              |
+| Imported artifacts, redaction mappings, chat, and selected context | Cleared; these remain in memory during the app run.      |
+| Hosted provider configuration and API token                        | Cleared; configure the provider again.                   |
+| CLI sign-in and MCP configuration                                  | Managed separately by the installed CLI, outside Chista. |
 
 Closing a debug session keeps its workspace's evidence available to other sessions during the same app run. Copying an installer does not transfer workspace data or CLI credentials. Adding a repository records its folder metadata; Chista does not automatically read or upload its files.

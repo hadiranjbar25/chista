@@ -1,9 +1,7 @@
 {
   "identifier": "default",
   "description": "Main window and explicitly configured hosted HTTPS connections. No filesystem or general shell plugin.",
-  "windows": [
-    "main"
-  ],
+  "windows": ["main"],
   "permissions": [
     "core:default",
     {

@@ -47,10 +47,10 @@ Install Codex or Claude Code separately, or configure a hosted provider in **Set
 
 To build an installer from source after installing the [platform prerequisites](docs/INSTALL.md#prerequisites) and running `npm ci --ignore-scripts`:
 
-| Build computer | Command | Installer directory |
-| --- | --- | --- |
-| Mac | `npm run tauri build -- --bundles dmg` | `src-tauri/target/release/bundle/dmg/` |
-| Windows | `npm run tauri build -- --bundles nsis` | `src-tauri/target/release/bundle/nsis/` |
+| Build computer | Command                                 | Installer directory                     |
+| -------------- | --------------------------------------- | --------------------------------------- |
+| Mac            | `npm run tauri build -- --bundles dmg`  | `src-tauri/target/release/bundle/dmg/`  |
+| Windows        | `npm run tauri build -- --bundles nsis` | `src-tauri/target/release/bundle/nsis/` |
 
 The documented verified build is macOS on Apple Silicon. See the guide for [processor options](docs/INSTALL.md#macos-disk-image-dmg), signing requirements, and [troubleshooting](docs/INSTALL.md#troubleshooting).
 
@@ -68,6 +68,8 @@ Files, chats, and hosted provider settings are cleared when the app restarts. Wo
 
 ## Develop
 
+See the [development guide](docs/DEVELOPMENT.md) for the source layout, data boundaries, formatting, and checks.
+
 Requires Node.js, Rust, and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ```sh
@@ -81,6 +83,7 @@ Run the application checks from the repository root:
 
 ```sh
 npm test
+npm run format:check
 npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 ```

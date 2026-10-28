@@ -11,14 +11,28 @@ type ClaudeEvent = { type: 'started' } | { type: 'delta' | 'replace'; text: stri
 export function claudeProvider(executablePath: string, turn?: NativeTurn): ModelProvider {
   return cliProvider('claude', executablePath, turn);
 }
-export function codexProvider(executablePath: string, turn?: NativeTurn, tools?: ToolHooks): ModelProvider {
+export function codexProvider(
+  executablePath: string,
+  turn?: NativeTurn,
+  tools?: ToolHooks,
+): ModelProvider {
   return cliProvider('codex', executablePath, turn, tools);
 }
-function cliProvider(agent: 'claude' | 'codex', executablePath: string, turn?: NativeTurn, tools?: ToolHooks): ModelProvider {
+function cliProvider(
+  agent: 'claude' | 'codex',
+  executablePath: string,
+  turn?: NativeTurn,
+  tools?: ToolHooks,
+): ModelProvider {
   const label = agent === 'codex' ? 'Codex' : 'Claude Code';
-  if (!isTauri()) throw new Error(`${label} chat requires the Tauri desktop app. Browser mode supports local file review only.`);
+  if (!isTauri())
+    throw new Error(
+      `${label} chat requires the Tauri desktop app. Browser mode supports local file review only.`,
+    );
   return {
-    id: agent, label, mode: agent,
+    id: agent,
+    label,
+    mode: agent,
     async complete(request, signal, onText) {
       signal.throwIfAborted();
       const requestId = crypto.randomUUID();
@@ -29,15 +43,34 @@ function cliProvider(agent: 'claude' | 'codex', executablePath: string, turn?: N
       const cancel = () => {
         if (started && !finished) void invoke('cancel_agent_chat', { requestId }).catch(() => {});
       };
-      events.onmessage = event => {
+      events.onmessage = (event) => {
         if (finished) return;
-        if(event.type==='tool_progress'||event.type==='tool_approval'||event.type==='tool_result'||event.type==='mcp_status') {void handleToolEvent(event,tools,signal);return;}
-        if (event.type === 'started') { started = true; if (signal.aborted) cancel(); }
-        if ((event.type === 'delta' || event.type === 'replace') && !signal.aborted) { text = event.type === 'replace' ? event.text : text + event.text; onText?.(text); }
+        if (
+          event.type === 'tool_progress' ||
+          event.type === 'tool_approval' ||
+          event.type === 'tool_result' ||
+          event.type === 'mcp_status'
+        ) {
+          void handleToolEvent(event, tools, signal);
+          return;
+        }
+        if (event.type === 'started') {
+          started = true;
+          if (signal.aborted) cancel();
+        }
+        if ((event.type === 'delta' || event.type === 'replace') && !signal.aborted) {
+          text = event.type === 'replace' ? event.text : text + event.text;
+          onText?.(text);
+        }
       };
       signal.addEventListener('abort', cancel, { once: true });
       try {
-        const result = await invoke<string>(turn ? 'agent_session_chat' : `${agent}_chat`, { requestId, executablePath, ...(turn ? {agent,...turn} : {payload:claudePayload(request)}), onEvent: events });
+        const result = await invoke<string>(turn ? 'agent_session_chat' : `${agent}_chat`, {
+          requestId,
+          executablePath,
+          ...(turn ? { agent, ...turn } : { payload: claudePayload(request) }),
+          onEvent: events,
+        });
         signal.throwIfAborted();
         return result;
       } finally {
@@ -59,14 +92,20 @@ export function streamingProse(raw: string): string {
   let result = '';
   for (let i = 0; i < value.length; i++) {
     if (value[i] === '"') break;
-    if (value[i] !== '\\') { result += value[i]; continue; }
+    if (value[i] !== '\\') {
+      result += value[i];
+      continue;
+    }
     const next = value[++i];
     if (!next) break;
     if (next === 'u') {
       const hex = value.slice(i + 1, i + 5);
       if (!/^[0-9a-f]{4}$/i.test(hex)) break;
-      result += String.fromCharCode(parseInt(hex, 16)); i += 4;
-    } else result += ({ n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' } as Record<string, string>)[next] ?? next;
+      result += String.fromCharCode(parseInt(hex, 16));
+      i += 4;
+    } else
+      result +=
+        ({ n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' } as Record<string, string>)[next] ?? next;
   }
   return result;
 }
