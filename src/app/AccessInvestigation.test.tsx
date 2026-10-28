@@ -16,7 +16,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 import App from './App';
 // @ts-expect-error Node-only test fixture, not part of the application bundle.
-import { incidentTool } from '../../scripts/access-incident-mcp.mjs';
+import { incidentTool } from '../../demo/scripts/access-incident-mcp.mjs';
 beforeEach(() => {
   localStorage.clear();
   native.invoke.mockReset();
@@ -147,7 +147,7 @@ it('imports and masks evidence, investigates access, renders cited UI, and sends
   const user = userEvent.setup();
   render(<App />);
   await user.click(screen.getByRole('button', { name: '+ Add files' }));
-  const raw = readFileSync(resolve('fixtures/access-denied/access.log'), 'utf8');
+  const raw = readFileSync(resolve('demo/fixtures/access-denied/access.log'), 'utf8');
   const file = new File([raw], 'private-access.log', { type: 'text/plain' });
   Object.defineProperty(file, 'text', { value: async () => raw });
   await user.upload(screen.getByLabelText('Import debug files'), file);

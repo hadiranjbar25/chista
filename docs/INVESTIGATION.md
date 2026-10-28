@@ -29,7 +29,7 @@ In another terminal, explicitly register the test server in your Codex configura
 codex mcp add chista-access-test --url http://127.0.0.1:4318/mcp
 ```
 
-Start a new Chista session with Codex. Attach `fixtures/access-denied/access.log` and `fixtures/access-denied/permissions.json`, then send:
+Start a new Chista session with Codex. Attach `demo/fixtures/access-denied/access.log` and `demo/fixtures/access-denied/permissions.json`, then send:
 
 > Investigate the access denial for doc-42 on October 22, 2026. Use the chista-access-test MCP tools to check access events and effective permissions, then query response counts from 09:55 to 10:20 UTC. Show the permission checks in a table and the observed counts in charts. Cite your sources, label the data as illustrative, and ask for the last successful access date using a date picker.
 

@@ -6,16 +6,18 @@ A continuous opening leads into masked panel reveals, sequential evidence highli
 
 The incident is illustrative and labeled on every frame. It follows an access denial through logs, roles and permissions, an approved Datadog lookup, two charts, and a date-picker follow-up. The OpenUI cards reuse Chista's response renderer. The app shell and cursor are animated presentation layers; the calendar popup is drawn for deterministic rendering.
 
+Run these commands from the repository root:
+
 ```sh
 npm run video:studio   # Edit and preview the timeline
-npm run video:render   # Render video/out/chista-access-debugging.mp4
+npm run video:render   # Render demo/video/out/chista-access-debugging.mp4
 npm run video:still -- --frame=1750
-npx remotion still video/index.tsx ChistaEndCard video/out/chista-end-card.png
+npx remotion still demo/video/index.tsx ChistaEndCard demo/video/out/chista-end-card.png --config demo/video/remotion.config.ts
 npm run video:check
-npm run video:verify -- video/out/chista-access-debugging.mp4
+npm run video:verify -- demo/video/out/chista-access-debugging.mp4
 ```
 
-Edit `incident.ts` for the sanitized evidence and responses, and `AccessDebugging.tsx` for the scene timing. Nothing contacts an agent, Datadog, or an MCP server during rendering. Generated media stays in `video/out/` and is excluded from Git.
+Edit `incident.ts` for the sanitized evidence and responses, and `AccessDebugging.tsx` for the scene timing. Nothing contacts an agent, Datadog, or an MCP server during rendering. Generated media stays in `demo/video/out/` and is excluded from Git.
 
 Exports use Remotion's managed Headless Shell and PNG capture. The frame audit decodes the whole MP4 and rejects isolated screen-wide flashes; visual review is still needed for pacing and motion.
 

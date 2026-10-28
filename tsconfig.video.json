@@ -1,5 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": { "types": ["node"] },
-  "include": ["video/**/*.ts", "video/**/*.tsx", "remotion.config.ts"]
-}

@@ -25,8 +25,10 @@ For a browser preview, use `npm run dev`. The browser supports local file review
 | `src/styles/`         | Global and workspace styles.                                                                      |
 | `src/testing/`        | Shared artifact test fixtures.                                                                    |
 | `src-tauri/src/`      | Rust desktop commands, native CLI processes, and MCP bridge.                                      |
-| `scripts/`            | Loopback incident fixture and connector smoke check.                                              |
-| `video/`              | Remotion demo; see its [guide](../video/README.md).                                               |
+| `demo/scripts/`       | Loopback incident fixture and connector smoke check.                                              |
+| `demo/video/`         | Remotion demo; see its [guide](../demo/video/README.md).                                          |
+
+Demo assets and tooling are grouped under [`demo/`](../demo/README.md): video source and rendering configuration in `demo/video/`, illustrative access evidence in `demo/fixtures/`, and the fixture server and connector check in `demo/scripts/`. The npm commands continue to run from the repository root.
 
 Tests live beside the feature they exercise. Application integration tests live in `src/app/`.
 

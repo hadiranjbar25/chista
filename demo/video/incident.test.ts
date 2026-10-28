@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { responseSchema } from '../src/chat/response';
+import { responseSchema } from '../../src/chat/response';
 import {
   beats,
   chapterAt,

@@ -88,4 +88,4 @@ npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-`npm run build` checks TypeScript and builds the frontend. Use the Tauri build commands above to create installers. The [access-investigation guide](docs/INVESTIGATION.md#checks) documents the MCP connector smoke check; [video/README.md](video/README.md) covers the Remotion demo.
+`npm run build` checks TypeScript and builds the frontend. Use the Tauri build commands above to create installers. The [access-investigation guide](docs/INVESTIGATION.md#checks) documents the MCP connector smoke check; [demo/video/README.md](demo/video/README.md) covers the Remotion demo.

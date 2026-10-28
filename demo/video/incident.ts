@@ -1,4 +1,4 @@
-import type { AgentReply } from '../src/chat/response';
+import type { AgentReply } from '../../src/chat/response';
 
 // Illustrative incident approved for the animation. Replace these sanitized
 // observations together when adapting this film to a real investigation.

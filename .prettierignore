@@ -2,8 +2,8 @@ node_modules/
 dist/
 src-tauri/target/
 src-tauri/gen/
-video/out/
+demo/video/out/
 package-lock.json
 Cargo.lock
 *.tsbuildinfo
-fixtures/
+demo/fixtures/

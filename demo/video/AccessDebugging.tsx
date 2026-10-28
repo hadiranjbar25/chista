@@ -25,7 +25,7 @@ import {
   Settings,
   ShieldCheck,
 } from 'lucide-react';
-import AgentResponse from '../src/chat/AgentResponse';
+import AgentResponse from '../../src/chat/AgentResponse';
 import {
   beats,
   chapters,
@@ -38,8 +38,8 @@ import {
   replies,
   seconds,
 } from './incident';
-import '../src/styles/styles.css';
-import '../src/styles/workspace.css';
+import '../../src/styles/styles.css';
+import '../../src/styles/workspace.css';
 import './video.css';
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 const ease = Easing.bezier(0.22, 1, 0.36, 1);

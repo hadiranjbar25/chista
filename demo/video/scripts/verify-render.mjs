@@ -5,7 +5,7 @@ import { resolve, dirname } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { RenderInternals } from '@remotion/renderer';
 const input = process.argv[2];
-if (!input) throw new Error('Usage: node video/scripts/verify-render.mjs <video.mp4>');
+if (!input) throw new Error('Usage: node demo/video/scripts/verify-render.mjs <video.mp4>');
 // Resolve the binary through the pinned Remotion package, including Linux
 // libc variants and Windows suffixes. Its working directory supplies dylibs.
 const executable = RenderInternals.getExecutablePath({
