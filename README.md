@@ -45,6 +45,15 @@ Use an installer matching your operating system and processor. See the [installa
 
 Install Codex or Claude Code separately, or configure a hosted provider in **Settings → Models**.
 
+To build an installer from source after installing the [platform prerequisites](docs/INSTALL.md#prerequisites) and running `npm ci --ignore-scripts`:
+
+| Build computer | Command | Installer directory |
+| --- | --- | --- |
+| Mac | `npm run tauri build -- --bundles dmg` | `src-tauri/target/release/bundle/dmg/` |
+| Windows | `npm run tauri build -- --bundles nsis` | `src-tauri/target/release/bundle/nsis/` |
+
+The documented verified build is macOS on Apple Silicon. See the guide for [processor options](docs/INSTALL.md#macos-disk-image-dmg), signing requirements, and [troubleshooting](docs/INSTALL.md#troubleshooting).
+
 ## Use
 
 1. Choose a **workspace** and add repo folders in **Workspace config**.
@@ -55,7 +64,7 @@ Tool activity shows what actually ran; response sources open the sanitized evide
 
 Expand any section with its full-screen icon; Escape restores the layout.
 
-Files and chats are currently cleared when the app restarts. See the [installation guide](docs/INSTALL.md) for platform support and current integration limits.
+Files, chats, and hosted provider settings are cleared when the app restarts. Workspace definitions and repository metadata are saved on this device. See [data storage](docs/INSTALL.md#data-stored-on-this-computer) for details.
 
 ## Develop
 
@@ -64,5 +73,16 @@ Requires Node.js, Rust, and the [Tauri prerequisites](https://v2.tauri.app/start
 ```sh
 npm ci --ignore-scripts
 npm run tauri dev
-npm test
 ```
+
+The desktop command starts Vite and opens Chista. For a browser preview with local file review, use `npm run dev` and open `http://127.0.0.1:1420`. Repository folder selection and CLI integrations require the desktop app.
+
+Run the application checks from the repository root:
+
+```sh
+npm test
+npm run build
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+`npm run build` checks TypeScript and builds the frontend. Use the Tauri build commands above to create installers. The [access-investigation guide](docs/INVESTIGATION.md#checks) documents the MCP connector smoke check; [video/README.md](video/README.md) covers the Remotion demo.
