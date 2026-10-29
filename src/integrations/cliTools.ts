@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { EvidenceSource, ToolActivity } from '../evidence/investigation';
 export type McpStatus = { name: string; authStatus: string; available: boolean; failed: boolean };
-export type ToolApproval = { server: string; tool: string; arguments: unknown };
+export type ToolApproval = { server: string; tool: string; arguments: unknown; kind?: 'http' };
 export type ToolHooks = {
   approve: (tool: ToolApproval) => Promise<boolean>;
   sanitize: (text: string) => string;
@@ -19,6 +19,7 @@ export type ToolEvent =
     }
   | {
       type: 'tool_approval';
+      kind?: 'http';
       id: string;
       callId?: string;
       server: string;
@@ -27,6 +28,7 @@ export type ToolEvent =
     }
   | {
       type: 'tool_result';
+      kind?: 'http';
       id: string;
       callId?: string;
       server?: string;
@@ -102,10 +104,10 @@ export async function handleToolEvent(
         : safe;
       if (event.success === true && event.server && event.tool) {
         const source: EvidenceSource = {
-          id: `mcp-${crypto.randomUUID()}`,
+          id: `${event.kind === 'http' ? 'http' : 'mcp'}-${crypto.randomUUID()}`,
           title: `${labels().server} · ${labels().tool}`,
           content,
-          kind: 'mcp',
+          kind: event.kind === 'http' ? 'http' : 'mcp',
           truncated,
         };
         hooks.evidence?.(source);
@@ -132,7 +134,11 @@ export async function handleToolEvent(
       if (encoded.length > 100000) throw new Error('Tool arguments exceed the review limit');
       const args = JSON.parse(encoded);
       hooks.activity?.({ id: callId, ...labels(), state: 'approval' });
-      const approved = await hooks.approve({ ...labels(), arguments: args });
+      const approved = await hooks.approve({
+        ...labels(),
+        arguments: args,
+        ...(event.kind ? { kind: event.kind } : {}),
+      });
       response = { approved: approved && !signal.aborted, arguments: args };
       if (!approved || signal.aborted)
         hooks.activity?.({

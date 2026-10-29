@@ -13,6 +13,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::ipc::Channel;
+#[path = "session_http.rs"]
+mod http;
+#[path = "http_request.rs"]
+mod http_request;
 #[path = "session_mcp.rs"]
 pub mod mcp;
 
@@ -379,7 +383,9 @@ impl Session {
                         closed,
                     )?;
                     let config = mcp::analysis_config(&event["result"]["config"])?;
-                    pipe.send(json!({"id":3,"method":"thread/start","params":{"cwd":directory.path(),"ephemeral":true,"approvalPolicy":"never","permissions":"chista","environments":[],"config":config,"baseInstructions":instructions,"dynamicTools":mcp.as_ref().map(|c|c.definitions()).unwrap_or_default()}}))?;
+                    let mut tools = mcp.as_ref().map(|c| c.definitions()).unwrap_or_default();
+                    tools.push(http::definition());
+                    pipe.send(json!({"id":3,"method":"thread/start","params":{"cwd":directory.path(),"ephemeral":true,"approvalPolicy":"never","permissions":"chista","environments":[],"config":config,"baseInstructions":instructions,"dynamicTools":tools}}))?;
                 }
                 Some(3) => {
                     break event["result"]["thread"]["id"]
@@ -476,6 +482,12 @@ impl Session {
             {
                 if !seen_calls.insert(event["params"]["callId"].to_string()) {
                     return Err("Duplicate MCP tool call rejected.".into());
+                }
+                if http::call(
+                    &self.pipe, &event, events, approvals, request_id, cancelled, closed,
+                )? {
+                    started = Instant::now();
+                    continue;
                 }
                 if let Some(mcp) = &self.mcp {
                     if mcp.call(
@@ -591,6 +603,7 @@ for line in sys.stdin:
  elif f.get('method')=='thread/start':
   assert f['params']['ephemeral'] and f['params']['baseInstructions']=='FORMAT_ONCE'
   assert f['params']['config']['mcp_servers']['inherited']['enabled']==False
+  assert any(t['name']=='chista_http_request' for t in f['params']['dynamicTools'])
   emit({'id':f['id'],'result':{'thread':{'id':'thread'}}})
  elif f.get('method')=='turn/start':
   count+=1

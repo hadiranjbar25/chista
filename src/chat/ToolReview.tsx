@@ -12,14 +12,20 @@ export default function ToolReview({
 }) {
   return (
     <div className="modal-backdrop">
-      <section className="modal" role="dialog" aria-modal="true" aria-label="Approve MCP tool">
-        <h2>Run this MCP tool?</h2>
+      <section
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={tool.kind === 'http' ? 'Approve API request' : 'Approve MCP tool'}
+      >
+        <h2>{tool.kind === 'http' ? 'Send this API request?' : 'Run this MCP tool?'}</h2>
         <p>
           {tool.server} · {tool.tool}
         </p>
         <p>
-          These locally sanitized arguments will be sent to the server. This tool may change remote
-          data.
+          {tool.kind === 'http'
+            ? 'Review the exact URL, method, headers, and body below. Chista will send these sanitized values using curl. This request may change remote data. Redirects are not followed.'
+            : 'These locally sanitized arguments will be sent to the server. This tool may change remote data.'}
         </p>
         <FullscreenSection title="Tool arguments">
           <pre>{JSON.stringify(tool.arguments, null, 2)}</pre>

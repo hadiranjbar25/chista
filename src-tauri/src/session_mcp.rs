@@ -13,18 +13,21 @@ pub fn respond_agent_tool(
     if response.to_string().len() > 1_000_000 {
         return Err("Tool response is too large.".into());
     }
-    let sender = approvals
-        .0
-        .lock()
-        .unwrap()
-        .remove(&id)
-        .ok_or("This tool request has expired.")?;
-    sender
-        .send(response)
-        .map_err(|_| "This tool request has ended.".into())
+    approvals.respond(&id, response)
 }
 impl Approvals {
-    fn exchange(
+    pub(super) fn respond(&self, id: &str, response: Value) -> Result<(), String> {
+        let sender = self
+            .0
+            .lock()
+            .unwrap()
+            .remove(id)
+            .ok_or("This tool request has expired.")?;
+        sender
+            .send(response)
+            .map_err(|_| "This tool request has ended.".into())
+    }
+    pub(super) fn exchange(
         &self,
         events: &Channel<Value>,
         id: String,
@@ -430,7 +433,7 @@ for line in sys.stdin:
  elif m=='thread/start':
   connector=f['id']==40
   assert f['params']['config']['mcp_servers']['fixture']['enabled']==connector
-  if not connector: assert len(f['params']['dynamicTools'])==2
+  if not connector: assert len(f['params']['dynamicTools'])==3
   emit({'id':f['id'],'result':{'thread':{'id':'connector' if connector else 'analysis'}}})
  elif m=='mcpServerStatus/list':
   emit({'id':f['id'],'result':{'data':[{'name':'fixture','authStatus':'oAuth','tools':{'search':{'name':'search','inputSchema':{'type':'object'}}}}],'nextCursor':None}})

@@ -64,6 +64,10 @@ Identifier fields named `id` or ending in `_id` are sensitive, regardless of cas
 
 Response schemas and parsing live in `src/chat/response.ts` and `widgetSchema.ts`, separate from React renderers. Provider instructions live in `src/integrations/uiInstructions.ts`. When changing the response format, update the schemas, instructions, rendering, and relevant tests together.
 
+CLI tool capability instructions live in `src/integrations/cliInstructions.ts`. `CliConversation` tracks delivered UI history length and evidence snapshots separately: discoveries in the redaction map do not restart the native thread, and context changes produce a replacement snapshot rather than a replay. An unavailable MCP server does not reset unrelated conversation state. Request previews default to off in `src/chat/chatConfig.ts`.
+
+Codex's `chista_http_request` dynamic tool is registered by `persistent.rs` even when no MCP connector exists. `session_http.rs` gates each request on the existing approval channel, then `http_request.rs` runs curl with structured arguments and bounded output. The response crosses the frontend sanitizer before the native process returns it to Codex. This integration follows the [Codex app-server dynamic tool protocol](https://learn.chatgpt.com/docs/app-server#dynamic-tool-calls-experimental). Native tests cover real loopback curl calls, literal `@` bodies, cancellation, response limits, denial, and sanitized output.
+
 ## Formatting
 
 ```sh

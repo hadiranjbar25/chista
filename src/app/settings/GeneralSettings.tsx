@@ -37,8 +37,16 @@ export default function GeneralSettings({ setNotice }: { setNotice: (notice: str
           <div>
             <strong>Claude Code</strong>
             <span>
-              In-app chat uses the installed CLI with tools disabled and reviewed context only. Each
-              session keeps an isolated CLI connection; closing the session releases it.
+              In-app chat uses the installed CLI with tools disabled and sanitized context only.
+              Each session keeps an isolated CLI connection; closing the session releases it.
+            </span>
+          </div>
+          <div>
+            <strong>Codex API requests</strong>
+            <span>
+              Uses local curl after you approve the URL, method, headers, and body. API results are
+              sanitized before reaching Codex. Request previews are off by default; tool approvals
+              remain required.
             </span>
           </div>
           <div>

@@ -228,6 +228,7 @@ describe('conversation workspace', () => {
     await user.type(screen.getByLabelText('Model identifier'), 'debug-model');
     await user.click(screen.getByRole('button', { name: 'Use hosted provider' }));
     await user.click(screen.getByRole('link', { name: '✳ chista' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
     await user.type(
       screen.getByRole('textbox', { name: 'Message agent' }),
       'Check alex@example.com{Enter}',

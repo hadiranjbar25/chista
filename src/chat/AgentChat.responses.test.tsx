@@ -17,7 +17,12 @@ it('renders successive live chunks while the native request is still pending', a
   const user = userEvent.setup();
   render(<AgentChat {...props} />);
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Debug timeout{Enter}');
-  await user.click(screen.getByRole('button', { name: 'Approve and send' }));
+
+  expect(
+    (screen.getByRole('textbox', { name: 'Message agent' }) as HTMLTextAreaElement).value,
+  ).toBe('');
+  expect(screen.getByRole('log').textContent).toContain('Debug timeout');
+
   await act(async () => emit({ type: 'delta', text: '{"text":"First' }));
   expect(screen.getByText('First')).toBeTruthy();
   expect(screen.getByText('Streaming response…')).toBeTruthy();
@@ -29,6 +34,26 @@ it('renders successive live chunks while the native request is still pending', a
   expect(screen.getAllByText('First second')).toHaveLength(1);
 });
 
+it('clears the composer on Send before the response arrives', async () => {
+  let finish!: (text: string) => void;
+  native.invoke.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const user = userEvent.setup();
+  render(<AgentChat {...props} />);
+  const composer = screen.getByRole('textbox', { name: 'Message agent' }) as HTMLTextAreaElement;
+  await user.type(composer, 'Investigate the timeout');
+  await user.click(screen.getByRole('button', { name: 'Send' }));
+  expect(composer.value).toBe('');
+  expect(screen.getByRole('log').textContent).toContain('Investigate the timeout');
+  expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy();
+  await act(async () => finish('{"text":"Done","blocks":[]}'));
+  expect(composer.value).toBe('');
+});
+
 it('takes a sanitized session title from the first agent response only', async () => {
   const onSessionTitle = vi.fn();
   native.invoke
@@ -38,7 +63,7 @@ it('takes a sanitized session title from the first agent response only', async (
     .mockResolvedValueOnce('{"text":"Next answer","blocks":[],"sessionTitle":"Different title"}');
   const user = userEvent.setup();
   render(<AgentChat {...props} onSessionTitle={onSessionTitle} />);
-  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
+
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Debug timeout{Enter}');
   await screen.findByText('First answer');
   expect(onSessionTitle).toHaveBeenCalledWith('Timeout for [CHAT_EMAIL_1]');
@@ -62,7 +87,7 @@ it('sends attachment-only messages with sanitized context and no filename metada
   );
   expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
   view.rerender(<AgentChat {...props} context={context} attachments={attachments} />);
-  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
+
   await user.click(screen.getByRole('button', { name: 'Send' }));
   expect(await screen.findByText('Checked attachment')).toBeTruthy();
   expect(native.invoke.mock.calls[0][1].payload).toContain('[EMAIL_1] timeout');
@@ -86,7 +111,7 @@ it('renders an agent-generated OpenUI text box and prepares a follow-up without 
   );
   const user = userEvent.setup();
   render(<AgentChat {...props} />);
-  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
+
   await user.type(
     screen.getByRole('textbox', { name: 'Message agent' }),
     'Show me a text box{Enter}',
@@ -115,7 +140,7 @@ it('renders an OpenUI date picker with bounds and prepares the selected date wit
   );
   const user = userEvent.setup();
   render(<AgentChat {...props} />);
-  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
+
   await user.type(
     screen.getByRole('textbox', { name: 'Message agent' }),
     'Show a date picker{Enter}',
@@ -145,7 +170,7 @@ it('shows complete OpenUI blocks during streaming without enabling follow-up con
   });
   const user = userEvent.setup();
   render(<AgentChat {...props} mode="codex" />);
-  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
+
   await user.type(
     screen.getByRole('textbox', { name: 'Message agent' }),
     'Show observed errors{Enter}',
@@ -189,7 +214,7 @@ it('preserves a follow-up prepared from an earlier response while the next answe
   );
   const user = userEvent.setup();
   render(<AgentChat {...props} />);
-  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
+
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'First question{Enter}');
   await screen.findByText('Choose a next step.');
   native.invoke.mockImplementation((_command, args) => {

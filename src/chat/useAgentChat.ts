@@ -15,7 +15,11 @@ import { Sanitizer } from '../evidence/safety';
 import { hostedProvider, prepareRequest, type Message } from '../integrations/providers';
 import { parseReply } from './response';
 import type { AgentChatProps, PendingRequest } from './chatTypes';
-import { ATTACHED_FILES_PROMPT, REQUEST_TIMEOUT_MS } from './chatConfig';
+import {
+  ATTACHED_FILES_PROMPT,
+  REQUEST_TIMEOUT_MS,
+  DEFAULT_REVIEW_BEFORE_SENDING,
+} from './chatConfig';
 
 export function useAgentChat({
   active = true,
@@ -41,7 +45,7 @@ export function useAgentChat({
   const [evidence, setEvidence] = useState<EvidenceSource[]>([]);
   const evidenceRef = useRef<EvidenceSource[]>([]);
   const [responseSources, setResponseSources] = useState<Record<number, EvidenceSource[]>>({});
-  const [reviewBeforeSending, setReviewBeforeSending] = useState(true);
+  const [reviewBeforeSending, setReviewBeforeSending] = useState(DEFAULT_REVIEW_BEFORE_SENDING);
   const [authStatus, setAuthStatus] = useState('');
   const [toolApproval, setToolApproval] = useState<ToolApproval | null>(null);
   const [mcpServers, setMcpServers] = useState<McpStatus[]>([]);
@@ -102,7 +106,12 @@ export function useAgentChat({
       abort.current?.abort();
       conversationState.current.reset();
     };
-  }, [mode, claudePath, codexPath, context]);
+  }, [mode, claudePath, codexPath]);
+  useEffect(() => {
+    // Revoke an in-flight snapshot when evidence changes, but retain an idle
+    // native thread so the next turn can send only the updated evidence.
+    abort.current?.abort();
+  }, [context]);
   const canSend =
     !busy && !attachments?.busy && Boolean(prompt.trim() || attachments?.files.length);
   function sendMessage() {
@@ -122,11 +131,6 @@ export function useAgentChat({
         mode,
         executablePath,
       };
-      if (
-        mode === 'codex' &&
-        mcpServers.some((server) => !server.available || server.authStatus === 'notLoggedIn')
-      )
-        conversationState.current.reset();
       if (mode !== 'hosted')
         request.turn = conversationState.current.prepare(mode, executablePath, request.request);
       if (reviewBeforeSending) setPending(request);
@@ -190,6 +194,7 @@ export function useAgentChat({
           );
         submitted = true;
         setMessages(snapshot.request.messages);
+        setPrompt((current) => (current === sentDraft ? '' : current));
         const reply = await provider.complete(snapshot.request, abort.current.signal, (text) => {
           if (mounted.current) setStream(sanitizer.current.text(text));
         });
@@ -213,7 +218,6 @@ export function useAgentChat({
             ],
           }));
           setMessages(next);
-          setPrompt((current) => (current === sentDraft ? '' : current));
         }
       } finally {
         clearTimeout(timer);

@@ -5,6 +5,27 @@ import { expect, it, vi } from 'vitest';
 import { native, chatProps as props } from './testing/nativeChatHarness';
 import AgentChat from './AgentChat';
 
+it('keeps a native thread when an unrelated configured MCP server is unavailable', async () => {
+  native.invoke.mockImplementation(async (_command, args) => {
+    args.onEvent.onmessage({
+      type: 'mcp_status',
+      servers: [{ name: 'offline', available: false, failed: true, authStatus: 'unsupported' }],
+    });
+    return '{"text":"Answer","blocks":[]}';
+  });
+  const user = userEvent.setup();
+  render(<AgentChat {...props} mode="codex" />);
+  await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'First{Enter}');
+  await screen.findByText('Answer');
+  const first = native.invoke.mock.calls[0][1];
+  await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Follow up{Enter}');
+  const next = native.invoke.mock.calls[1][1];
+  expect(next.sessionKey).toBe(first.sessionKey);
+  expect(next.systemPrompt).toBeNull();
+  expect(JSON.parse(next.payload)).toEqual({ messages: [{ role: 'user', content: 'Follow up' }] });
+  expect(native.close).not.toHaveBeenCalled();
+});
+
 it('reviews sanitized MCP arguments and returns only sanitized tool data to Codex', async () => {
   let event!: (event: unknown) => void;
   let finish!: (text: string) => void;
@@ -20,7 +41,7 @@ it('reviews sanitized MCP arguments and returns only sanitized tool data to Code
   const user = userEvent.setup();
   render(<AgentChat {...props} mode="codex" />);
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Search MCP{Enter}');
-  await user.click(screen.getByRole('button', { name: 'Approve and send' }));
+
   await act(async () =>
     event({
       type: 'tool_approval',
@@ -71,7 +92,7 @@ it('offers native Codex MCP sign-in for unauthenticated servers', async () => {
   const user = userEvent.setup();
   render(<AgentChat {...props} mode="codex" />);
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Connect MCP{Enter}');
-  await user.click(screen.getByRole('button', { name: 'Approve and send' }));
+
   await user.click(await screen.findByRole('button', { name: 'Sign in' }));
   expect(native.invoke).toHaveBeenCalledWith('codex_mcp_sign_in', {
     executablePath: '',
@@ -98,7 +119,7 @@ it('keeps tool evidence, states and cited artifacts attached to their original t
   });
   const user = userEvent.setup();
   const view = render(<AgentChat {...props} context={context} mode="codex" />);
-  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
+
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Check access{Enter}');
   await act(async () =>
     event({
@@ -182,7 +203,7 @@ it('retains denied and interrupted calls without claiming they completed', async
   });
   const user = userEvent.setup();
   render(<AgentChat {...props} mode="codex" />);
-  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
+
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Check access{Enter}');
   await act(async () =>
     event({

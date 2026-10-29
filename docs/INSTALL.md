@@ -37,6 +37,18 @@ Codex MCP uses that computer's CLI configuration. HTTPS and loopback HTTP server
 
 Workspaces and CLI credentials are not transferred with the installer. Add the new computer's repo folders in Workspace config.
 
+### Sending messages and calling APIs
+
+**Review before sending** is off by default. Messages send immediately after local sanitization; turn the checkbox on when you want an outgoing-message preview. API and MCP tool approvals are separate and remain required.
+
+Codex and Claude Code keep a native CLI session for each debug conversation. Initial instructions, conversation history, and attached evidence are sent when that session starts. Follow-ups send only the next message. Changing attachments sends a replacement evidence snapshot in the same session; an unchanged snapshot is not sent again. Changing the agent or executable, or recovering from a failed/cancelled connection, starts a new native session and may require the sanitized history again. Hosted chat-completions providers are stateless and still receive the required conversation on every request.
+
+With **Codex**, ask for an HTTP(S) API call or a curl request. Chista exposes `chista_http_request`, which uses your computer's curl executable. Review the method, URL, headers, and text body in **Approve API request**, then approve once or deny. **Stop** cancels the running request. HTTP error statuses such as 403 are returned as evidence rather than invented successes.
+
+This API tool supports GET, HEAD, POST, PUT, PATCH, DELETE, and OPTIONS, with a 30-second curl timeout and a 1 MB response limit. It does not follow redirects, read local files, load curl configuration files, or run arbitrary shell commands. JSON/text responses pass through the workspace sanitizer before reaching Codex; non-text responses are omitted. It works without configuring an MCP server. Install curl separately if it is missing from your system.
+
+Sensitive placeholders in approved URLs, headers, and bodies are sent exactly as shown. Chista does not reverse placeholders into original credentials or identifiers, so a masked credential will not authenticate a request. Claude Code and hosted providers do not expose this API tool.
+
 ## Build an installer
 
 Build installers on their destination operating system. The Tauri build command builds the frontend automatically before compiling and packaging the desktop app; `npm run build` alone only builds the frontend.

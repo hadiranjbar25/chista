@@ -18,6 +18,7 @@ it.each(['claude', 'codex'])('%s requires approval and renders generated OpenUI'
   });
   const user = userEvent.setup();
   render(<AgentChat {...props} mode={agent} />);
+  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
   await user.type(
     screen.getByRole('textbox', { name: 'Message agent' }),
     'Investigate alex@example.com{Enter}',
@@ -62,7 +63,7 @@ it('cancels a native request when its session becomes inactive', async () => {
   const user = userEvent.setup();
   const view = render(<AgentChat {...props} active />);
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Debug this{Enter}');
-  await user.click(screen.getByRole('button', { name: 'Approve and send' }));
+
   await act(async () => view.rerender(<AgentChat {...props} active={false} />));
   expect(native.invoke).toHaveBeenCalledWith(
     'cancel_agent_chat',
@@ -73,6 +74,7 @@ it('cancels a native request when its session becomes inactive', async () => {
 it('switching providers revokes pending approval without sending', async () => {
   const user = userEvent.setup();
   const view = render(<AgentChat {...props} />);
+  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Check timeouts{Enter}');
   expect(screen.getByRole('dialog').textContent).toContain('Claude Code CLI');
   view.rerender(<AgentChat {...props} mode="codex" codexPath="/usr/local/bin/codex" />);
@@ -92,6 +94,7 @@ it.each(['claude', 'codex'])(
     });
     const user = userEvent.setup();
     render(<AgentChat {...props} mode={agent} />);
+    await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
     expect(screen.queryByText(/sign-in & terminal/)).toBeNull();
     await user.type(
       screen.getByRole('textbox', { name: 'Message agent' }),
@@ -116,7 +119,7 @@ it('stopping sign-in preserves the draft and prevents a deferred send', async ()
   const user = userEvent.setup();
   render(<AgentChat {...props} />);
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Keep this draft{Enter}');
-  await user.click(screen.getByRole('button', { name: 'Approve and send' }));
+
   await user.click(screen.getByRole('button', { name: 'Stop' }));
   expect(
     (screen.getByRole('textbox', { name: 'Message agent' }) as HTMLTextAreaElement).value,
@@ -132,8 +135,7 @@ it.each(['claude', 'codex'])(
     const user = userEvent.setup();
     render(<AgentChat {...props} mode={agent} />);
     const toggle = screen.getByRole('checkbox', { name: 'Review before sending' });
-    expect((toggle as HTMLInputElement).checked).toBe(true);
-    await user.click(toggle);
+    expect((toggle as HTMLInputElement).checked).toBe(false);
     await user.type(
       screen.getByRole('textbox', { name: 'Message agent' }),
       'Investigate alex@example.com{Enter}',
@@ -155,12 +157,12 @@ it.each(['claude', 'codex'])(
 );
 
 it.each(['claude', 'codex'])(
-  '%s keeps an idle session for follow-ups and resets on context changes',
+  '%s keeps the same session and sends updated context without replaying history',
   async (agent) => {
     native.invoke.mockResolvedValue('{"text":"Answer","blocks":[]}');
     const user = userEvent.setup();
     const view = render(<AgentChat {...props} mode={agent} />);
-    await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
+
     await user.type(
       screen.getByRole('textbox', { name: 'Message agent' }),
       'First question{Enter}',
@@ -178,14 +180,17 @@ it.each(['claude', 'codex'])(
       messages: [{ role: 'user', content: 'Follow up' }],
     });
     view.rerender(<AgentChat {...props} mode={agent} context="Changed evidence" />);
-    expect(native.close).toHaveBeenCalledWith({ sessionKey: first.sessionKey });
+    expect(native.close).not.toHaveBeenCalled();
     await user.type(
       screen.getByRole('textbox', { name: 'Message agent' }),
       'With new evidence{Enter}',
     );
     const next = native.invoke.mock.calls[2][1];
-    expect(next.sessionKey).not.toBe(first.sessionKey);
-    expect(next.systemPrompt).toContain('You are Chista');
+    expect(next.sessionKey).toBe(first.sessionKey);
+    expect(next.systemPrompt).toBeNull();
     expect(next.payload).toContain('Changed evidence');
+    expect(next.payload).not.toContain('First question');
+    expect(next.payload).not.toContain('Follow up');
+    expect(next.payload).not.toContain('Reviewed evidence: 2 timeouts');
   },
 );

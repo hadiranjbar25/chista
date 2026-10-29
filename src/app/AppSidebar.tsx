@@ -72,7 +72,7 @@ export default function AppSidebar({
         <div className="ide-privacy">
           <ShieldCheck size={20} />
           <strong>Safe Debug Sessions</strong>
-          <p>Raw artifacts stay local. Only reviewed snapshots reach your chat.</p>
+          <p>Raw artifacts stay local. Only sanitized context reaches your agent.</p>
           <span>{isTauri() ? 'Desktop workspace' : 'Browser · local file review only'}</span>
         </div>
       </div>

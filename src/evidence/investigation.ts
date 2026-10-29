@@ -4,7 +4,7 @@ export type EvidenceSource = {
   id: string;
   title: string;
   content: string;
-  kind: 'artifact' | 'mcp';
+  kind: 'artifact' | 'mcp' | 'http';
   truncated?: boolean;
 };
 export type ToolActivity = {

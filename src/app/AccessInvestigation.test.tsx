@@ -146,6 +146,7 @@ it('imports and masks evidence, investigates access, renders cited UI, and sends
   });
   const user = userEvent.setup();
   render(<App />);
+  await user.click(screen.getByRole('checkbox', { name: 'Review before sending' }));
   await user.click(screen.getByRole('button', { name: '+ Add files' }));
   const raw = readFileSync(resolve('demo/fixtures/access-denied/access.log'), 'utf8');
   const file = new File([raw], 'private-access.log', { type: 'text/plain' });

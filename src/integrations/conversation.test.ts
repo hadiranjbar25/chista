@@ -28,7 +28,7 @@ it('sends instructions once and previews only the new message for follow-ups', (
     messages: [{ role: 'user', content: 'Next' }],
   });
 });
-it('isolates sessions and resets when context, instructions or history differ', () => {
+it('isolates sessions and updates evidence without replaying instructions or history', () => {
   const one = new CliConversation();
   const two = new CliConversation();
   const request = {
@@ -40,13 +40,80 @@ it('isolates sessions and resets when context, instructions or history differ', 
   expect(first.systemPrompt).toContain('No tools are available');
   expect(other.sessionKey).not.toBe(first.sessionKey);
   one.commit(first, [...request.messages, { role: 'assistant', content: 'Answer' }]);
-  const next = one.prepare('claude', '', { ...request, context: 'context B' });
-  expect(next.sessionKey).not.toBe(first.sessionKey);
-  expect(next.systemPrompt).not.toBeNull();
+  const history: Message[] = [...request.messages, { role: 'assistant', content: 'Answer' }];
+  const next = one.prepare('claude', '', {
+    messages: [...history, { role: 'user', content: 'Next' }],
+    context: 'context B',
+  });
+  expect(next.sessionKey).toBe(first.sessionKey);
+  expect(next.systemPrompt).toBeNull();
+  expect(native.invoke).not.toHaveBeenCalled();
+  expect(next.payload).toContain('context B');
+  expect(next.payload).not.toContain('context A');
+  expect(next.payload).not.toContain('Question');
+  const continued: Message[] = [
+    ...history,
+    { role: 'user', content: 'Next' },
+    { role: 'assistant', content: 'New answer' },
+  ];
+  one.commit(next, continued);
+  const followUp = one.prepare('claude', '', {
+    messages: [...continued, { role: 'user', content: 'Continue' }],
+    context: 'context B',
+  });
+  expect(JSON.parse(followUp.payload)).toEqual({
+    messages: [{ role: 'user', content: 'Continue' }],
+  });
+  const removed = one.prepare('claude', '', {
+    messages: [...continued, { role: 'user', content: 'No files now' }],
+    context: null,
+  });
+  expect(removed.sessionKey).toBe(first.sessionKey);
+  expect(removed.payload).toContain('context has been removed');
+  expect(removed.payload).not.toContain('context B');
+  one.reset();
   expect(native.invoke).toHaveBeenCalledWith('close_agent_session', {
     sessionKey: first.sessionKey,
   });
-  one.reset();
   one.commit(next, request.messages);
   expect(one.prepare('codex', '', request).systemPrompt).not.toBeNull();
+});
+
+it('does not restart a thread when later redaction discoveries change earlier UI messages', () => {
+  const session = new CliConversation();
+  const first = session.prepare('codex', '', {
+    messages: [{ role: 'user', content: 'Inspect record-123' }],
+    context: null,
+  });
+  session.commit(first, [
+    { role: 'user', content: 'Inspect record-123' },
+    { role: 'assistant', content: 'Found record-123' },
+  ]);
+  const next = session.prepare('codex', '', {
+    messages: [
+      { role: 'user', content: 'Inspect [SENSITIVE_1]' },
+      { role: 'assistant', content: 'Found [SENSITIVE_1]' },
+      { role: 'user', content: 'Continue' },
+    ],
+    context: null,
+  });
+  expect(next.sessionKey).toBe(first.sessionKey);
+  expect(next.systemPrompt).toBeNull();
+  expect(JSON.parse(next.payload)).toEqual({ messages: [{ role: 'user', content: 'Continue' }] });
+});
+
+it('does not mark a denied preview as delivered and reconnects after history is truncated', () => {
+  const session = new CliConversation();
+  const request = {
+    messages: [{ role: 'user' as const, content: 'Question' }],
+    context: 'Context',
+  };
+  const denied = session.prepare('codex', '', request);
+  const retried = session.prepare('codex', '', request);
+  expect(retried.systemPrompt).not.toBeNull();
+  expect(retried.payload).toContain('Context');
+  session.commit(retried, [...request.messages, { role: 'assistant', content: 'Answer' }]);
+  const reset = session.prepare('codex', '', request);
+  expect(reset.sessionKey).not.toBe(denied.sessionKey);
+  expect(reset.systemPrompt).not.toBeNull();
 });
