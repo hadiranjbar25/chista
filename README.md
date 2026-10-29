@@ -43,6 +43,8 @@ CLI agents use their native sign-in. Supported **Codex MCP** connections can ret
 
 Use an installer matching your operating system and processor. See the [installation guide](docs/INSTALL.md) for installing or building a package.
 
+Download the macOS disk image or Windows setup executable from [GitHub Releases](https://github.com/hadiranjbar25/chista/releases). Releases are unsigned; see the installation guide for platform verification and first-launch limits.
+
 Install Codex or Claude Code separately, or configure a hosted provider in **Settings → Models**.
 
 To build an installer from source after installing the [platform prerequisites](docs/INSTALL.md#prerequisites) and running `npm ci --ignore-scripts`:

@@ -18,7 +18,9 @@ Copy an installer built for the destination computer's operating system and proc
 | Windows | Run the `.exe` installer.                                  |
 | Linux   | Install the `.deb` package or run the `.AppImage`.         |
 
-The verified build is currently **macOS on Apple Silicon (M1 or newer)**. Windows, Linux, and Intel Mac builds have not been verified. Prebuilt downloads are not published on GitHub yet.
+Download installers from [GitHub Releases](https://github.com/hadiranjbar25/chista/releases). The release workflow builds a universal macOS `.dmg` for Apple Silicon and Intel, and a Windows x64 setup `.exe`. Each release includes `SHA256SUMS.txt` for checking downloaded files.
+
+The verified runtime is currently **macOS on Apple Silicon (M1 or newer)**. Windows, Linux, and Intel Mac runtime behavior has not been verified on physical hardware. A successful installer build does not establish full platform support.
 
 Current Mac builds are not Developer ID signed or notarized, so macOS may block first launch. Production distribution needs Apple signing and notarization.
 

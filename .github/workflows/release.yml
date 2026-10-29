@@ -1,0 +1,98 @@
+name: Build and publish installers
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node .github/scripts/check-release-version.mjs
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run video:check
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-15
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin --bundles dmg
+            artifact: macos-installer
+            path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          - platform: windows-2022
+            targets: x86_64-pc-windows-msvc
+            args: --bundles nsis
+            artifact: windows-installer
+            path: src-tauri/target/release/bundle/nsis/*-setup.exe
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.targets }}
+      - run: npm ci --ignore-scripts
+      - name: Build installer
+        run: npm run tauri build -- ${{ matrix.args }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: '*-installer'
+          path: installers
+          merge-multiple: true
+      - name: Publish both installers and checksums
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="v$(node -p "require('./package.json').version")"
+          if gh release view "$tag" --json isDraft > release-state.json 2>/dev/null; then
+            if [[ "$(node -p "require('./release-state.json').isDraft")" != "true" ]]; then
+              echo "Release $tag is already published. Bump the version before publishing again."
+              exit 1
+            fi
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --draft \
+              --title "Chista $tag" --notes-file .github/RELEASE_NOTES.md
+          fi
+          (cd installers && sha256sum *.dmg *.exe > SHA256SUMS.txt)
+          gh release upload "$tag" installers/*.dmg installers/*.exe installers/SHA256SUMS.txt --clobber
+          gh release edit "$tag" --draft=false --latest
