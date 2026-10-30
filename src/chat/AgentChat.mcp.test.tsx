@@ -284,7 +284,7 @@ it('keeps Claude MCP sign-in in the top connections list', async () => {
       type: 'mcp_status',
       servers: [
         { name: 'connected', authStatus: 'unsupported', available: true, failed: false },
-        { name: 'needs-auth', authStatus: 'notLoggedIn', available: false, failed: false },
+        { name: 'claude.ai Atlassian', authStatus: 'notLoggedIn', available: false, failed: false },
         { name: 'offline', authStatus: 'unsupported', available: false, failed: true },
       ],
     });
@@ -300,12 +300,12 @@ it('keeps Claude MCP sign-in in the top connections list', async () => {
   expect(connections.closest('details')?.open).toBe(true);
   const signIn = screen.getByRole('button', { name: 'Sign in' });
   expect(signIn.closest('.chat-status')).toBeTruthy();
-  expect(signIn.closest('li')?.textContent).toContain('needs-auth');
+  expect(signIn.closest('li')?.textContent).toContain('claude.ai Atlassian');
   expect(screen.getByText('Connection failed').closest('.chat-status')).toBeTruthy();
   await user.click(signIn);
   expect(native.invoke).toHaveBeenCalledWith('claude_mcp_sign_in', {
     executablePath: '',
-    server: 'needs-auth',
+    server: 'claude.ai Atlassian',
   });
   expect(native.close).not.toHaveBeenCalled();
 });

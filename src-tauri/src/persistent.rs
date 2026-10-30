@@ -387,7 +387,7 @@ impl Session {
                 "--verbose",
                 "--include-partial-messages",
                 "--tools",
-                "",
+                "ToolSearch,WaitForMcpServers",
                 "--permission-prompt-tool",
                 "stdio",
                 "--disable-slash-commands",
@@ -398,10 +398,9 @@ impl Session {
                 instructions,
             ]);
             let config = claude_mcp::config_file(directory.path())?;
-            command
-                .arg("--strict-mcp-config")
-                .arg("--mcp-config")
-                .arg(config);
+            // Keep native account/company connector discovery. Strict mode
+            // suppresses those connectors, even when the CLI can use them.
+            command.arg("--mcp-config").arg(config);
             command.env_remove("CLAUDE_CODE_SAFE_MODE");
             let pipe = Pipe::spawn(&mut command)?;
             claude_mcp::initialize(&pipe, cancelled, closed)?;

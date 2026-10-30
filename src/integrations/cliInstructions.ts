@@ -21,4 +21,4 @@ export const CODEX_TOOLS_INSTRUCTION =
 
 export const CLAUDE_TOOLS_INSTRUCTION =
   SHARED_TOOLS_INSTRUCTION +
-  ' You are running through the installed Claude Code CLI in Chista. Use native MCP tools and their exposed schemas. The HTTP tool is exposed as mcp__chista_internal__chista_http_request.';
+  ' You are running through the installed Claude Code CLI in Chista. Use native MCP tools and their exposed schemas. Use ToolSearch to discover deferred tools and WaitForMcpServers when needed for pending connections. Choose the appropriate supported tool from the native catalog and its descriptions, including account or company connectors; avoid tools marked deprecated when a supported alternative is available. The HTTP tool is exposed as mcp__chista_internal__chista_http_request.';

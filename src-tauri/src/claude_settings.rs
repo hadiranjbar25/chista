@@ -45,6 +45,9 @@ fn connection_settings(source: &Path) -> Result<Value, String> {
         "awsCredentialExport",
         "forceLoginMethod",
         "forceLoginOrgUUID",
+        "disableClaudeAiConnectors",
+        "allowedMcpServers",
+        "deniedMcpServers",
     ] {
         if let Some(value) = value.get(key) {
             settings.insert(key.into(), value.clone());
@@ -80,6 +83,8 @@ fn connection_settings(source: &Path) -> Result<Value, String> {
                         | "CLAUDE_CODE_CLIENT_CERT"
                         | "CLAUDE_CODE_CLIENT_KEY"
                         | "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE"
+                        | "ENABLE_CLAUDEAI_MCP_SERVERS"
+                        | "ENABLE_TOOL_SEARCH"
                 )
             {
                 if !value.is_string() {
@@ -109,6 +114,18 @@ fn settings_file(source: &Path) -> Result<tempfile::NamedTempFile, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preserves_connector_policy_and_native_discovery_preferences() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("settings.json");
+        let policy = json!({
+            "disableClaudeAiConnectors": true,
+            "deniedMcpServers": [{"serverName":"claude.ai Disabled"}],
+            "env": {"ENABLE_CLAUDEAI_MCP_SERVERS":"false", "ENABLE_TOOL_SEARCH":"auto:5"}
+        });
+        std::fs::write(&source, policy.to_string()).unwrap();
+        assert_eq!(connection_settings(&source).unwrap(), policy);
+    }
     #[test]
     fn preserves_provider_and_auth_configuration_without_loading_hooks_or_permissions() {
         let dir = tempfile::tempdir().unwrap();

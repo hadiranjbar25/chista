@@ -2,8 +2,9 @@
 // permissions and before MCP output enters the next model request.
 use super::*;
 
-// Load only MCP definitions. Loading all user settings would also execute
-// unrelated user hooks/plugins before Chista can review them.
+// Supplement native account/company connectors with user MCP definitions.
+// --setting-sources "" keeps unrelated user hooks/plugins out of this session,
+// but also prevents the CLI from loading user MCP definitions itself.
 pub(super) fn config_file(directory: &std::path::Path) -> Result<PathBuf, String> {
     let source = if let Some(config) = std::env::var_os("CLAUDE_CONFIG_DIR") {
         PathBuf::from(config).join(".claude.json")
@@ -161,6 +162,21 @@ pub(super) fn status(event: &Value, events: &Channel<Value>) -> Result<(), Strin
     Ok(())
 }
 
+pub(super) struct PendingTool {
+    name: String,
+    arguments: Option<Value>,
+    permission_confirmed: bool,
+}
+impl PendingTool {
+    fn new(name: &str, arguments: Option<Value>) -> Self {
+        Self {
+            name: name.into(),
+            arguments,
+            permission_confirmed: false,
+        }
+    }
+}
+
 pub(super) fn control(
     pipe: &Pipe,
     event: &Value,
@@ -169,7 +185,7 @@ pub(super) fn control(
     request_id: &str,
     cancelled: &AtomicBool,
     closed: &AtomicBool,
-    pending: &mut HashMap<String, String>,
+    pending: &mut HashMap<String, PendingTool>,
     seen: &mut std::collections::HashSet<String>,
 ) -> Result<(), String> {
     let bridge = &event["request"];
@@ -188,6 +204,30 @@ pub(super) fn control(
         return Ok(());
     }
     let request = &event["request"];
+    if request["subtype"] == "can_use_tool" {
+        // Organization policies can require a native permission confirmation
+        // even after PreToolUse. Honor the user's existing one-call approval
+        // only for the same call, tool and exact sanitized arguments.
+        if let Some(tool) = request["tool_use_id"]
+            .as_str()
+            .and_then(|id| pending.get_mut(id))
+        {
+            if !tool.permission_confirmed
+                && request["tool_name"] == tool.name
+                && tool
+                    .arguments
+                    .as_ref()
+                    .is_some_and(|args| args == &request["input"])
+            {
+                tool.permission_confirmed = true;
+                return reply(
+                    pipe,
+                    event,
+                    json!({"behavior":"allow","updatedInput":tool.arguments}),
+                );
+            }
+        }
+    }
     if request["subtype"] != "hook_callback" {
         // PreToolUse handles MCP permissions even if CLI settings would allow
         // a tool automatically. Never grant an unreviewed permission fallback.
@@ -210,6 +250,16 @@ pub(super) fn control(
         if !seen.insert(call.to_string()) {
             return Err("Duplicate Claude tool call rejected.".into());
         }
+        if matches!(name, "ToolSearch" | "WaitForMcpServers") && input["tool_input"].is_object() {
+            // Native discovery exposes tool schemas or waits for connections;
+            // it does not execute a server tool or read workspace files.
+            pending.insert(call.to_string(), PendingTool::new(name, None));
+            return reply(
+                pipe,
+                event,
+                json!({"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}),
+            );
+        }
         if !name.starts_with("mcp__") || !input["tool_input"].is_object() {
             return reply(
                 pipe,
@@ -219,7 +269,7 @@ pub(super) fn control(
         }
         if name == claude_tools::HTTP_TOOL {
             // The bridge runs the shared HTTP approval/sanitization pipeline.
-            pending.insert(call.to_string(), name.to_string());
+            pending.insert(call.to_string(), PendingTool::new(name, None));
             return reply(
                 pipe,
                 event,
@@ -246,7 +296,10 @@ pub(super) fn control(
         if !approved["arguments"].is_object() {
             return Err("Invalid approved MCP arguments.".into());
         }
-        pending.insert(call.to_string(), name.to_string());
+        pending.insert(
+            call.to_string(),
+            PendingTool::new(name, Some(approved["arguments"].clone())),
+        );
         events.send(json!({"type":"tool_progress","callId":key,"server":server,"tool":name,"state":"running"})).map_err(|_| "Chat closed.")?;
         return reply(
             pipe,
@@ -254,7 +307,7 @@ pub(super) fn control(
             json!({"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":approved["arguments"]}}),
         );
     }
-    if pending.remove(call).as_deref() != Some(name) {
+    if pending.remove(call).as_ref().map(|tool| tool.name.as_str()) != Some(name) {
         return Err("Unreviewed Claude tool output rejected.".into());
     }
     if name == claude_tools::HTTP_TOOL
@@ -292,6 +345,11 @@ pub(super) fn control(
     if callback != "chista-post" || hook != "PostToolUse" {
         return Err("Unexpected Claude tool callback.".into());
     }
+    if matches!(name, "ToolSearch" | "WaitForMcpServers") {
+        // Preserve native tool-reference blocks so deferred tools remain
+        // callable. Actual MCP calls still take the review/redaction path.
+        return reply(pipe, event, json!({}));
+    }
     let result = mcp::filter_result(input["tool_response"].clone());
     let success = result["isError"] != true && result.get("error").is_none();
     let server = name
@@ -323,15 +381,18 @@ mod tests {
 import json,sys
 scenario=SCENARIO
 args=sys.argv[1:]
-assert '--safe-mode' not in args and '--strict-mcp-config' in args
+assert '--safe-mode' not in args and '--strict-mcp-config' not in args
 assert json.load(open(args[args.index('--mcp-config')+1])).get('mcpServers') is not None
-assert args[args.index('--tools')+1]==''
+assert args[args.index('--tools')+1]=='ToolSearch,WaitForMcpServers'
 assert args[args.index('--setting-sources')+1]==''
 assert args[args.index('--permission-prompt-tool')+1]=='stdio'
 assert '--disable-slash-commands' in args
 assert 'disableAllHooks' not in ' '.join(args)
 def emit(v): print(json.dumps(v),flush=True)
 def read(): return json.loads(sys.stdin.readline())
+def permission(call='call',name='mcp__fixture__search',args=None):
+ emit({'type':'control_request','request_id':'permission','request':{'subtype':'can_use_tool','tool_use_id':call,'tool_name':name,'input':args if args is not None else {'query':'SANITIZED ARGUMENT'},'decision_reason_code':'org_ask_ceiling'}})
+ return read()['response']['response']
 f=read()
 assert f['request']['hooks']['PostToolUse'][0]['hookCallbackIds']==['chista-post']
 emit({'type':'control_response','response':{'subtype':'success','request_id':f['request_id'],'response':{'hooks_applied':scenario!='unsupported'}}})
@@ -340,14 +401,25 @@ assert read()['type']=='user'
 emit({'type':'system','subtype':'init','mcp_servers':[{'name':'fixture','status':'connected'}]})
 tool='Bash' if scenario=='builtin' else 'mcp__fixture__search'
 def hook(callback,event):
- emit({'type':'control_request','request_id':callback,'request':{'subtype':'hook_callback','callback_id':callback,'input':{'hook_event_name':event,'tool_name':tool,'tool_use_id':'call','tool_input':{'query':'original@example.com'},'error':'401 Unauthorized for private@example.com','tool_response':{'content':[{'type':'text','text':'private@example.com'},{'type':'image','data':'PRIVATE_BINARY'}]}}}})
+ emit({'type':'control_request','request_id':callback,'request':{'subtype':'hook_callback','callback_id':callback,'input':{'hook_event_name':event,'tool_name':tool,'tool_use_id':'discovery' if tool in ['ToolSearch','WaitForMcpServers'] else 'call','tool_input':{'query':'original@example.com'},'error':'401 Unauthorized for private@example.com','tool_response':{'content':[{'type':'tool_reference','tool_name':'mcp__fixture__search'}]} if tool in ['ToolSearch','WaitForMcpServers'] else {'content':[{'type':'text','text':'private@example.com'},{'type':'image','data':'PRIVATE_BINARY'}]}}}})
  if scenario=='failure' and event=='PostToolUseFailure':
   sys.stdin.read();sys.exit()
- return read()['response']['response']['hookSpecificOutput']
+ return read()['response']['response'].get('hookSpecificOutput',{})
+if scenario in ['tool-search','wait-for-servers']:
+ tool='ToolSearch' if scenario=='tool-search' else 'WaitForMcpServers'
+ assert hook('chista-pre','PreToolUse')['permissionDecision']=='allow'
+ assert hook('chista-post','PostToolUse')=={}
+ tool='mcp__fixture__search'
 r=hook('chista-pre','PreToolUse')
 assert r['permissionDecision']==('deny' if scenario in ['denied','builtin'] else 'allow')
 if scenario not in ['denied','builtin']:
  assert r['updatedInput']=={'query':'SANITIZED ARGUMENT'}
+ if scenario=='permission':
+  assert permission(call='other')['behavior']=='deny'
+  assert permission(name='Bash')['behavior']=='deny'
+  assert permission(args={'query':'unapproved'})['behavior']=='deny'
+  assert permission()=={'behavior':'allow','updatedInput':{'query':'SANITIZED ARGUMENT'}}
+  assert permission()['behavior']=='deny'
  if scenario=='duplicate':
   hook('chista-pre','PreToolUse');sys.exit(8)
  if scenario=='failure': hook('chista-failure','PostToolUseFailure')
@@ -356,6 +428,8 @@ if scenario not in ['denied','builtin']:
  r=hook('chista-post','PostToolUse')
  assert r['updatedMCPToolOutput']['content']==[{'type':'text','text':'SANITIZED RESULT'}]
  assert 'private@example.com' not in json.dumps(r) and 'PRIVATE_BINARY' not in json.dumps(r)
+else:
+ assert permission()['behavior']=='deny'
 emit({'type':'result','subtype':'success','is_error':False,'result':'Done'})
 sys.stdin.read()
 "#.replace("SCENARIO", &format!("{scenario:?}"));
@@ -368,6 +442,9 @@ sys.stdin.read()
     fn claude_requires_approval_and_replaces_mcp_output_before_inference() {
         for scenario in [
             "allowed",
+            "tool-search",
+            "wait-for-servers",
+            "permission",
             "denied",
             "builtin",
             "failure",
@@ -426,7 +503,16 @@ sys.stdin.read()
                 seen.iter()
                     .filter(|event| event["type"] == "tool_result")
                     .count(),
-                usize::from(scenario == "allowed" || scenario == "failure")
+                usize::from(
+                    [
+                        "allowed",
+                        "failure",
+                        "tool-search",
+                        "wait-for-servers",
+                        "permission"
+                    ]
+                    .contains(&scenario)
+                )
             );
         }
     }

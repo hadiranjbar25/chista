@@ -205,18 +205,29 @@ pub fn codex_mcp_sign_in(executable_path: String, server: String) -> Result<Stri
     mcp_sign_in(executable_path, server, "codex")
 }
 fn mcp_sign_in(executable_path: String, server: String, agent: &str) -> Result<String, String> {
-    if server.is_empty()
-        || server.len() > 100
-        || !server
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
-    {
+    if !valid_mcp_login_name(&server, agent) {
         return Err("Invalid MCP server name.".into());
     }
     launch_native_sign_in(
         resolve_cli(&executable_path, agent)?,
         &["mcp", "login", &server],
     )
+}
+fn valid_mcp_login_name(server: &str, agent: &str) -> bool {
+    if agent == "claude" {
+        // Account connectors use display names such as "claude.ai Atlassian".
+        // launch_native_sign_in quotes each argument; reject options/controls.
+        !server.trim().is_empty()
+            && server.len() <= 200
+            && !server.starts_with('-')
+            && !server.chars().any(char::is_control)
+    } else {
+        !server.is_empty()
+            && server.len() <= 100
+            && server
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+    }
 }
 
 #[tauri::command]
@@ -329,6 +340,16 @@ mod tests {
     #[test]
     fn quotes_shell_metacharacters() {
         assert_eq!(shell_quote("a'b;$(touch nope)"), "'a'\\''b;$(touch nope)'");
+    }
+    #[test]
+    fn accepts_native_claude_connector_names_without_accepting_options_or_controls() {
+        assert!(valid_mcp_login_name("claude.ai Atlassian", "claude"));
+        assert!(valid_mcp_login_name("Company Jira – Streaming", "claude"));
+        for name in ["", "   ", "--help", "atlassian\nother"] {
+            assert!(!valid_mcp_login_name(name, "claude"));
+        }
+        assert!(valid_mcp_login_name("atlassian", "codex"));
+        assert!(!valid_mcp_login_name("claude.ai Atlassian", "codex"));
     }
     #[test]
     fn rejects_relative_executable() {
