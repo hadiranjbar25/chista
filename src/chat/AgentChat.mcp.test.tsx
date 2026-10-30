@@ -96,7 +96,10 @@ it('offers native Codex MCP sign-in for unauthenticated servers', async () => {
   render(<AgentChat {...props} mode="codex" />);
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Connect MCP{Enter}');
 
-  await user.click(await screen.findByRole('button', { name: 'Sign in' }));
+  await user.click(await screen.findByText('MCP connections · 0 available'));
+  const signIn = screen.getByRole('button', { name: 'Sign in' });
+  expect(signIn.closest('.chat-status')).toBeTruthy();
+  await user.click(signIn);
   expect(native.invoke).toHaveBeenCalledWith('codex_mcp_sign_in', {
     executablePath: '',
     server: 'rag-e-khab',
@@ -235,7 +238,7 @@ it('retains denied and interrupted calls without claiming they completed', async
   expect(screen.getByText('Denied')).toBeTruthy();
 });
 
-it('shows Claude MCP connection status and native authentication guidance', async () => {
+it('keeps Claude MCP sign-in in the top connections list', async () => {
   native.invoke.mockImplementation(async (command, args) => {
     if (command === 'claude_mcp_sign_in') return 'Complete sign-in in Terminal.';
     args.onEvent.onmessage({ type: 'started' });
@@ -244,6 +247,7 @@ it('shows Claude MCP connection status and native authentication guidance', asyn
       servers: [
         { name: 'connected', authStatus: 'unsupported', available: true, failed: false },
         { name: 'needs-auth', authStatus: 'notLoggedIn', available: false, failed: false },
+        { name: 'offline', authStatus: 'unsupported', available: false, failed: true },
       ],
     });
     return '{"text":"Check the server sign-in.","blocks":[]}';
@@ -252,8 +256,15 @@ it('shows Claude MCP connection status and native authentication guidance', asyn
   render(<AgentChat {...props} mode="claude" />);
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Connect MCP{Enter}');
   await screen.findByText('Check the server sign-in.');
-  expect(screen.getByText('MCP connections · 1 available')).toBeTruthy();
-  await user.click(screen.getByRole('button', { name: 'Sign in' }));
+  const connections = screen.getByText('MCP connections · 1 available');
+  expect(connections.closest('details')?.open).toBe(false);
+  await user.click(connections);
+  expect(connections.closest('details')?.open).toBe(true);
+  const signIn = screen.getByRole('button', { name: 'Sign in' });
+  expect(signIn.closest('.chat-status')).toBeTruthy();
+  expect(signIn.closest('li')?.textContent).toContain('needs-auth');
+  expect(screen.getByText('Connection failed').closest('.chat-status')).toBeTruthy();
+  await user.click(signIn);
   expect(native.invoke).toHaveBeenCalledWith('claude_mcp_sign_in', {
     executablePath: '',
     server: 'needs-auth',

@@ -7,8 +7,18 @@ type StatusProps = {
   mode: string;
   mcpServers: McpStatus[];
   onFiles: () => void;
+  busy: boolean;
+  signInMcp: (server: string) => Promise<void>;
 };
-export function ChatStatus({ context, hasAttachments, mode, mcpServers, onFiles }: StatusProps) {
+export function ChatStatus({
+  context,
+  hasAttachments,
+  mode,
+  mcpServers,
+  onFiles,
+  busy,
+  signInMcp,
+}: StatusProps) {
   return (
     <div className="chat-status">
       {context && !hasAttachments && (
@@ -33,58 +43,27 @@ export function ChatStatus({ context, hasAttachments, mode, mcpServers, onFiles 
             {mcpServers.map((server) => (
               <li key={server.name}>
                 <strong>{server.name}</strong>
-                <span>
-                  {server.authStatus === 'notLoggedIn'
-                    ? 'Sign-in required'
-                    : server.failed
-                      ? 'Connection failed'
-                      : server.available
-                        ? 'Tools available'
-                        : 'No tools available'}
-                </span>
+                <div className="mcp-connection-actions">
+                  <span>
+                    {server.authStatus === 'notLoggedIn'
+                      ? 'Sign-in required'
+                      : server.failed
+                        ? 'Connection failed'
+                        : server.available
+                          ? 'Tools available'
+                          : 'No tools available'}
+                  </span>
+                  {server.authStatus === 'notLoggedIn' && (
+                    <button disabled={busy} onClick={() => void signInMcp(server.name)}>
+                      Sign in
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
         </details>
       )}
     </div>
-  );
-}
-export function McpSignIn({
-  mode,
-  mcpServers,
-  busy,
-  signInMcp,
-}: {
-  mode: string;
-  mcpServers: McpStatus[];
-  busy: boolean;
-  signInMcp: (server: string) => Promise<void>;
-}) {
-  return (
-    (mode === 'codex' || mode === 'claude') &&
-    mcpServers.some((server) => !server.available || server.authStatus === 'notLoggedIn') && (
-      <div className="mcp-sign-in">
-        {mcpServers
-          .filter((server) => !server.available || server.authStatus === 'notLoggedIn')
-          .map((server) => (
-            <div key={server.name}>
-              <span>
-                {server.name} ·{' '}
-                {server.authStatus === 'notLoggedIn'
-                  ? 'Sign-in required'
-                  : server.failed
-                    ? 'Connection failed'
-                    : 'No tools available'}
-              </span>
-              {server.authStatus === 'notLoggedIn' && (
-                <button disabled={busy} onClick={() => void signInMcp(server.name)}>
-                  Sign in
-                </button>
-              )}
-            </div>
-          ))}
-      </div>
-    )
   );
 }

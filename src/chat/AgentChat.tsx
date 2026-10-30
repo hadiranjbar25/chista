@@ -2,7 +2,7 @@ import { useAgentChat } from './useAgentChat';
 import type { AgentChatProps } from './chatTypes';
 import ChatMessages from './ChatMessages';
 import ChatComposer from './ChatComposer';
-import { ChatStatus, McpSignIn } from './McpConnections';
+import { ChatStatus } from './McpConnections';
 import ToolReview from './ToolReview';
 import RequestReview from './RequestReview';
 
@@ -16,14 +16,10 @@ export default function AgentChat(props: AgentChatProps) {
         mode={props.mode}
         mcpServers={chat.mcpServers}
         onFiles={props.onFiles}
-      />
-      <ChatMessages chat={chat} />
-      <McpSignIn
-        mode={props.mode}
-        mcpServers={chat.mcpServers}
         busy={chat.busy}
         signInMcp={chat.signInMcp}
       />
+      <ChatMessages chat={chat} />
       <ChatComposer {...props} chat={chat} />
       {chat.toolApproval && (
         <ToolReview tool={chat.toolApproval} onDecide={chat.decideTool} onStop={chat.stop} />

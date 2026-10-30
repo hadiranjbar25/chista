@@ -1,4 +1,5 @@
 mod claude;
+mod claude_settings;
 mod codex_stream;
 mod persistent;
 mod repositories;

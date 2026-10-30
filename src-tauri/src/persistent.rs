@@ -299,6 +299,7 @@ struct Session {
     thread: Option<String>,
     next_id: u64,
     mcp: Option<mcp::Connector>,
+    _claude_settings: Option<tempfile::NamedTempFile>,
 }
 impl Session {
     fn start(
@@ -313,6 +314,8 @@ impl Session {
         let mut command = Command::new(binary);
         command.current_dir(directory.path());
         if agent == "claude" {
+            let settings = crate::claude_settings::user_settings()?;
+            command.arg("--settings").arg(settings.path());
             command.args([
                 "-p",
                 "--input-format",
@@ -346,6 +349,7 @@ impl Session {
                 thread: None,
                 next_id: 10,
                 mcp: None,
+                _claude_settings: Some(settings),
             });
         }
         let file = directory.path().join("instructions.md");
@@ -410,6 +414,7 @@ impl Session {
             thread: Some(thread),
             next_id: 10,
             mcp,
+            _claude_settings: None,
         })
     }
     #[cfg(test)]

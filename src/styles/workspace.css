@@ -1351,21 +1351,6 @@ details > p {
   margin-top: 20px;
 }
 
-.mcp-sign-in {
-  font-size: 11px;
-  color: #857693;
-  margin: 12px 0;
-}
-.mcp-sign-in > div {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-.mcp-sign-in button {
-  font-size: 11px;
-  padding: 5px 8px;
-}
-
 .investigation-progress {
   margin: 14px 0 8px;
   padding: 12px 14px;
@@ -1493,8 +1478,20 @@ details > p {
 }
 .mcp-connections li {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 15px;
+}
+.mcp-connection-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.mcp-connection-actions button {
+  font-size: 11px;
+  padding: 5px 8px;
 }
 .mcp-connections strong {
   font-weight: 550;
