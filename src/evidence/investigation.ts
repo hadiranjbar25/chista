@@ -13,6 +13,7 @@ export type ToolActivity = {
   tool: string;
   state: 'approval' | 'running' | 'completed' | 'denied' | 'failed' | 'cancelled';
   sourceId?: string;
+  detail?: string;
 };
 export function updateActivity(items: ToolActivity[], next: ToolActivity) {
   const existing = items.find((item) => item.id === next.id);

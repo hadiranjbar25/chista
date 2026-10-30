@@ -192,10 +192,16 @@ it('never records failed or cancelled tool results as successful evidence', asyn
     server: 'datadog',
     tool: 'query',
     success: false,
-    result: { isError: true, content: [{ type: 'text', text: 'Permission denied' }] },
+    result: {
+      isError: true,
+      content: [{ type: 'text', text: '401 Unauthorized for alex@example.com' }],
+    },
   };
   await handleToolEvent(event, toolHooks, controller.signal);
   expect(activity.mock.calls[0][0].state).toBe('failed');
+  expect(activity.mock.calls[0][0].detail).toContain('401 Unauthorized');
+  expect(activity.mock.calls[0][0].detail).toContain('[MCP_EMAIL_1]');
+  expect(activity.mock.calls[0][0].detail).not.toContain('alex@example.com');
   expect(evidence).not.toHaveBeenCalled();
   controller.abort();
   await handleToolEvent({ ...event, success: true }, toolHooks, controller.signal);

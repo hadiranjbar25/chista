@@ -267,9 +267,27 @@ pub(super) fn control(
         return reply(pipe, event, json!({}));
     }
     if callback == "chista-failure" && hook == "PostToolUseFailure" {
+        let server = name
+            .strip_prefix("mcp__")
+            .unwrap_or(name)
+            .split("__")
+            .next()
+            .unwrap_or("MCP");
+        let error = input["error"]
+            .as_str()
+            .filter(|error| !error.is_empty())
+            .unwrap_or("Claude did not provide MCP failure details.");
+        // Route the error through the same local sanitizer as successful tool
+        // output. Raw server errors must never become UI activity or evidence.
+        let safe = approvals.exchange(events, format!("{key}:result"), json!({"type":"tool_result","callId":key,"server":server,"tool":name,"success":false,"result":{"isError":true,"content":[{"type":"text","text":error}]}}), cancelled, closed)?;
+        safe["content"]
+            .as_str()
+            .ok_or("Sanitized MCP error missing.")?;
         // Failure hooks cannot replace the native error text. End this turn
         // before Claude can consume an unsanitized transport/server error.
-        return Err("Claude MCP tool failed. Check server access and native MCP sign-in; send a new message to retry.".into());
+        return Err(
+            "Claude MCP tool failed. See tool activity for sanitized error details.".into(),
+        );
     }
     if callback != "chista-post" || hook != "PostToolUse" {
         return Err("Unexpected Claude tool callback.".into());
@@ -322,7 +340,7 @@ assert read()['type']=='user'
 emit({'type':'system','subtype':'init','mcp_servers':[{'name':'fixture','status':'connected'}]})
 tool='Bash' if scenario=='builtin' else 'mcp__fixture__search'
 def hook(callback,event):
- emit({'type':'control_request','request_id':callback,'request':{'subtype':'hook_callback','callback_id':callback,'input':{'hook_event_name':event,'tool_name':tool,'tool_use_id':'call','tool_input':{'query':'original@example.com'},'tool_response':{'content':[{'type':'text','text':'private@example.com'},{'type':'image','data':'PRIVATE_BINARY'}]}}}})
+ emit({'type':'control_request','request_id':callback,'request':{'subtype':'hook_callback','callback_id':callback,'input':{'hook_event_name':event,'tool_name':tool,'tool_use_id':'call','tool_input':{'query':'original@example.com'},'error':'401 Unauthorized for private@example.com','tool_response':{'content':[{'type':'text','text':'private@example.com'},{'type':'image','data':'PRIVATE_BINARY'}]}}}})
  if scenario=='failure' and event=='PostToolUseFailure':
   sys.stdin.read();sys.exit()
  return read()['response']['response']['hookSpecificOutput']
@@ -408,7 +426,7 @@ sys.stdin.read()
                 seen.iter()
                     .filter(|event| event["type"] == "tool_result")
                     .count(),
-                usize::from(scenario == "allowed")
+                usize::from(scenario == "allowed" || scenario == "failure")
             );
         }
     }

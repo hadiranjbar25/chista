@@ -42,6 +42,12 @@ export default function InvestigationProgress({
                     {item.server} · {item.tool}
                   </strong>
                   <span>{labels[item.state]}</span>
+                  {item.state === 'failed' && item.detail && (
+                    <details>
+                      <summary>View error details</summary>
+                      <pre>{item.detail}</pre>
+                    </details>
+                  )}
                   {source && (
                     <details>
                       <summary>View sanitized evidence</summary>

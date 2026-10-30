@@ -107,6 +107,44 @@ it('offers native Codex MCP sign-in for unauthenticated servers', async () => {
   expect(screen.getByRole('status').textContent).toContain('Complete sign-in in Terminal');
 });
 
+it('keeps sanitized Atlassian failure details visible after a Claude turn fails', async () => {
+  let event!: (value: unknown) => void, fail!: (error: Error) => void;
+  native.invoke.mockImplementation((command, args) => {
+    if (command === 'respond_agent_tool') return Promise.resolve();
+    event = args.onEvent.onmessage;
+    event({ type: 'started' });
+    return new Promise((_resolve, reject) => {
+      fail = reject;
+    });
+  });
+  const user = userEvent.setup();
+  render(<AgentChat {...props} mode="claude" />);
+  await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Search Jira{Enter}');
+  await act(async () =>
+    event({
+      type: 'tool_result',
+      id: 'atlassian:result',
+      callId: 'atlassian',
+      server: 'atlassian',
+      tool: 'search',
+      success: false,
+      result: {
+        isError: true,
+        content: [{ type: 'text', text: '401 Unauthorized for alex@example.com' }],
+      },
+    }),
+  );
+  await act(async () =>
+    fail(new Error('Claude MCP tool failed. See tool activity for sanitized error details.')),
+  );
+  await user.click(screen.getByText('View error details'));
+  expect(screen.getByText('Failed')).toBeTruthy();
+  const detail = screen.getByText(/401 Unauthorized/);
+  expect(detail.textContent).toContain('[CHAT_EMAIL_1]');
+  expect(detail.textContent).not.toContain('alex@example.com');
+  expect(screen.queryByText('View sanitized evidence')).toBeNull();
+});
+
 it('keeps tool evidence, states and cited artifacts attached to their original turn', async () => {
   let event!: (value: unknown) => void, finish!: (value: string) => void;
   native.invoke.mockImplementation((command, args) => {

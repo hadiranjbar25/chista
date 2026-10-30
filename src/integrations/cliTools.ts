@@ -127,6 +127,7 @@ export async function handleToolEvent(
             id: callId,
             ...labels(),
             state: event.success === true ? 'completed' : 'failed',
+            ...(event.success === true ? {} : { detail: content }),
           });
       }
     } else {
@@ -158,6 +159,9 @@ export async function handleToolEvent(
         server: 'MCP',
         tool: 'lookup',
         state: signal.aborted ? 'cancelled' : 'failed',
+        ...(!signal.aborted && event.type === 'tool_result'
+          ? { detail: 'MCP result could not be sanitized.' }
+          : {}),
       });
   }
   await invoke('respond_agent_tool', { id: event.id, response }).catch(() => {});
