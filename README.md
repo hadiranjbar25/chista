@@ -32,14 +32,14 @@ flowchart TB
     class Results output
 ```
 
-1. **Bring the evidence.** Add repo folders in **Workspace config**, start a session, and attach debug files directly in chat. Adding a repository does not upload its contents to the agent.
+1. **Bring the evidence.** Add repo folders in **Workspace config**, start a session, and attach debug files directly in chat. Selected repository folder names are included as sanitized metadata so the agent knows which repo you mean. Full local paths and repository contents are not uploaded.
 2. **Inspect the masking.** Local sanitization replaces detected sensitive values with consistent placeholders, so repeated values remain traceable across artifacts. **Files & mappings** shows the sanitized content and its original-to-placeholder mapping. Inspect these before sharing; pattern matching can miss sensitive values.
 3. **Choose what to send.** Select and compact the relevant sanitized evidence into context. Messages send immediately by default; enable **Review before sending** to preview an outgoing request. Sanitization always runs. Raw imported files and mappings stay on your computer; the agent receives the prepared conversation and selected sanitized context.
 4. **Investigate together.** Answers stream into chat and can include OpenUI charts, tables, and forms. Controls such as date pickers prepare a follow-up in the message box; you choose when to send it.
 
-CLI agents use their native sign-in. Supported **Codex MCP** connections can retrieve external evidence: each tool call needs approval, and its result is sanitized before returning to the agent. Tool approval remains required even when request preview is off. See the [installation guide](docs/INSTALL.md) for supported connections and current limits.
+CLI agents use their native sign-in. **Claude Code and Codex MCP** connections can retrieve external evidence: each tool call needs approval, and its result is sanitized before returning to the agent. Tool approval remains required even when request preview is off. See the [installation guide](docs/INSTALL.md) for supported connections and current limits.
 
-Codex can also make HTTP(S) API requests through **`chista_http_request`**, which runs local curl after you approve the URL, method, headers, and body. It returns sanitized response evidence. Native CLI sessions send initial instructions and evidence once, then send the next message; changed attachments update the evidence snapshot without replaying the conversation.
+Claude Code and Codex can also make HTTP(S) API requests through **`chista_http_request`**, which runs local curl after you approve the URL, method, headers, and body. It returns sanitized response evidence. Native CLI sessions send initial instructions and evidence once, then send the next message; changed attachments update the evidence snapshot without replaying the conversation.
 
 ## Install
 
@@ -67,6 +67,8 @@ The documented verified build is macOS on Apple Silicon. See the guide for [proc
 Tool activity shows what actually ran; response sources open the sanitized evidence. Completed OpenUI blocks can appear while an answer streams. Follow the [access-investigation guide](docs/INVESTIGATION.md) for a repeatable test incident or your own data.
 
 Expand any section with its full-screen icon; Escape restores the layout.
+
+To remove a debug session, open **Session actions (⋯) → Remove session** beside its title. Removing the last session opens a fresh conversation. Workspace files and mappings remain available.
 
 Files, chats, and hosted provider settings are cleared when the app restarts. Workspace definitions and repository metadata are saved on this device. See [data storage](docs/INSTALL.md#data-stored-on-this-computer) for details.
 

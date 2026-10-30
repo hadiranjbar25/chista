@@ -25,7 +25,7 @@ export default function ModelSettings({ settings }: { settings: AgentSettings })
     clearHosted,
   } = settings;
   return (
-    <FullscreenSection title="Models & agents">
+    <FullscreenSection title="Models & agents" className="focus-page">
       <section className="agent-settings">
         <div className="page-heading">
           <div className="view-title">
@@ -74,7 +74,9 @@ export default function ModelSettings({ settings }: { settings: AgentSettings })
                 {claudeStatus}
               </p>
               <p className="muted">
-                Sign-in opens automatically when needed. Only sanitized context is sent.
+                Sign-in opens automatically when needed. Supports MCP tools and HTTP API requests,
+                with approval before each call and sanitized results. MCP servers come from the
+                CLI’s user configuration; chat shows connection status and a Sign in button.
               </p>
             </div>
           </details>
@@ -104,9 +106,9 @@ export default function ModelSettings({ settings }: { settings: AgentSettings })
                 {codexStatus}
               </p>
               <p className="muted">
-                Requires a recent Codex CLI. Sign-in opens automatically when needed. MCP servers
-                come from your Codex configuration; chat shows connection status and requests
-                approval before each tool call.
+                Sign-in opens automatically when needed. Supports MCP tools and HTTP API requests,
+                with approval before each call and sanitized results. MCP servers come from the
+                CLI’s user configuration; chat shows connection status and a Sign in button.
               </p>
             </div>
           </details>

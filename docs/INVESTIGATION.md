@@ -4,9 +4,9 @@ Chista can stream an agent's explanation, reveal completed OpenUI blocks as they
 
 ## Your own incident
 
-Use Codex for MCP-backed investigations. Claude Code and hosted providers can analyze attached sanitized evidence, but Chista's MCP bridge currently supports Codex only.
+Use Claude Code or Codex for MCP-backed investigations. Both provide tool approvals, sanitized results and evidence citations. Hosted providers can analyze attached sanitized evidence.
 
-1. Configure your monitoring and identity/permissions MCP servers through Codex's native configuration and sign-in. Chista supports HTTPS and loopback HTTP transports, not stdio servers.
+1. Configure your monitoring and identity/permissions MCP servers through your selected CLI's user configuration. Both agents support stdio, HTTPS and loopback HTTP servers. Use the Sign in button in chat for native MCP authentication.
 2. Add relevant access logs and permission/policy exports in chat. Select the evidence to include and inspect the local mappings. Imported repository folders are metadata; their files are not automatically read or uploaded.
 3. Ask the agent to distinguish authentication from authorization, check effective permissions and resource policy, and correlate the failure time with monitoring data.
 4. Approve each tool's exact arguments. The activity list distinguishes awaiting approval, running, completed, denied, failed and cancelled calls. Returned evidence is sanitized before reaching the agent. Request preview is optional; tool approval is always required.

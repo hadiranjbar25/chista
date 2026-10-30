@@ -71,6 +71,37 @@ it('cancels a native request when its session becomes inactive', async () => {
   );
 });
 
+it('cancels active work and releases the native conversation when the session is removed', async () => {
+  let reject!: (reason: Error) => void;
+  let turns = 0;
+  native.invoke.mockImplementation((command, args) => {
+    if (command === 'cancel_agent_chat') {
+      reject(new Error('Cancelled'));
+      return Promise.resolve();
+    }
+    args.onEvent.onmessage({ type: 'started' });
+    if (++turns === 1) return Promise.resolve('{"text":"First answer","blocks":[]}');
+    return new Promise((_resolve, fail) => {
+      reject = fail;
+    });
+  });
+  const user = userEvent.setup();
+  const view = render(<AgentChat {...props} mode="codex" />);
+  await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'First{Enter}');
+  await screen.findByText('First answer');
+  const first = native.invoke.mock.calls[0][1];
+  await user.type(
+    screen.getByRole('textbox', { name: 'Message agent' }),
+    'Long-running follow-up{Enter}',
+  );
+  await act(async () => view.unmount());
+  expect(native.invoke).toHaveBeenCalledWith(
+    'cancel_agent_chat',
+    expect.objectContaining({ requestId: expect.any(String) }),
+  );
+  expect(native.close).toHaveBeenCalledWith({ sessionKey: first.sessionKey });
+});
+
 it('switching providers revokes pending approval without sending', async () => {
   const user = userEvent.setup();
   const view = render(<AgentChat {...props} />);

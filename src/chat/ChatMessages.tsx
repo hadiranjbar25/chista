@@ -5,6 +5,7 @@ import InvestigationProgress from './InvestigationProgress';
 import { partialReply } from '../evidence/investigation';
 import { exitSectionFullscreen } from '../components/FullscreenSection';
 import type { ChatController } from './useAgentChat';
+import { restoreReply } from './restoreReply';
 
 export default function ChatMessages({ chat }: { chat: ChatController }) {
   const {
@@ -19,8 +20,9 @@ export default function ChatMessages({ chat }: { chat: ChatController }) {
     stream,
     agentLabel,
     authStatus,
+    restoreText,
   } = chat;
-  const growing = partialReply(stream);
+  const growing = restoreReply(partialReply(stream), restoreText);
   return (
     <div
       ref={conversation}
@@ -53,6 +55,7 @@ export default function ChatMessages({ chat }: { chat: ChatController }) {
             {m.role === 'assistant' ? (
               <AgentResponse
                 content={m.content}
+                restoreText={restoreText}
                 evidence={responseSources[i] ?? sources}
                 onFollow={(text) => {
                   exitSectionFullscreen();

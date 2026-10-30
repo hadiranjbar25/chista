@@ -7,17 +7,20 @@ import { parseReply } from './response';
 import { FollowupContext } from './rendering/FollowupContext';
 import { responseLibrary } from './rendering/responseLibrary';
 import { replyProgram } from './rendering/replyProgram';
+import { restoreReply } from './restoreReply';
 
 export default function AgentResponse({
   content,
   onFollow,
   evidence = [],
+  restoreText = (text: string) => text,
 }: {
   content: string;
   onFollow: (prompt: string) => void;
   evidence?: EvidenceSource[];
+  restoreText?: (text: string) => string;
 }) {
-  const reply = parseReply(content);
+  const reply = restoreReply(parseReply(content), restoreText);
   const [failed, setFailed] = useState(false);
   return (
     <>

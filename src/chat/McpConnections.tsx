@@ -17,7 +17,7 @@ export function ChatStatus({ context, hasAttachments, mode, mcpServers, onFiles 
           {context.length.toLocaleString()} characters of reviewed context attached
         </button>
       )}
-      {mode === 'codex' && mcpServers.length > 0 && (
+      {(mode === 'codex' || mode === 'claude') && mcpServers.length > 0 && (
         <details className="mcp-connections">
           <summary>
             MCP connections ·{' '}
@@ -62,7 +62,7 @@ export function McpSignIn({
   signInMcp: (server: string) => Promise<void>;
 }) {
   return (
-    mode === 'codex' &&
+    (mode === 'codex' || mode === 'claude') &&
     mcpServers.some((server) => !server.available || server.authStatus === 'notLoggedIn') && (
       <div className="mcp-sign-in">
         {mcpServers

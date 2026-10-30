@@ -88,8 +88,7 @@ pub fn safe_servers(config: &Value) -> Result<(Value, Vec<String>), String> {
             );
             overrides["mcp_servers"][name]["enabled"] = json!(false);
 
-            let allowed = value["enabled"] != false
-                && value.get("command").is_none()
+            let remote = value["command"].is_null()
                 && value["url"]
                     .as_str()
                     .and_then(|url| tauri::Url::parse(url).ok())
@@ -103,6 +102,11 @@ pub fn safe_servers(config: &Value) -> Result<(Value, Vec<String>), String> {
                             && url.username().is_empty()
                             && url.password().is_none()
                     });
+            let stdio = value["command"]
+                .as_str()
+                .is_some_and(|command| !command.trim().is_empty())
+                && value["url"].is_null();
+            let allowed = value["enabled"] != false && (remote || stdio);
             if allowed {
                 overrides["mcp_servers"][name]["enabled"] = json!(true);
                 names.push(name.clone());
@@ -336,7 +340,7 @@ impl Connector {
         Ok(true)
     }
 }
-fn filter_result(mut result: Value) -> Value {
+pub(super) fn filter_result(mut result: Value) -> Value {
     if let Some(content) = result["content"].as_array_mut() {
         *content = content
             .iter()
@@ -362,7 +366,7 @@ fn filter_result(mut result: Value) -> Value {
 mod tests {
     use super::*;
     #[test]
-    fn only_configured_https_or_loopback_servers_can_start() {
+    fn configured_stdio_https_and_loopback_servers_can_start() {
         let (config, names) = safe_servers(&json!({"mcp_servers":{
             "remote":{"url":"https://example.com/mcp","headers":{"secret":"private"},"tool_timeout_sec":null},
             "local":{"command":"cat","args":["/private/file"]},
@@ -371,14 +375,14 @@ mod tests {
             "disabled":{"url":"https://example.com","enabled":false}
         }}))
         .unwrap();
-        assert_eq!(names, vec!["loopback", "remote"]);
+        assert_eq!(names, vec!["local", "loopback", "remote"]);
         assert!(config["mcp_servers"]["remote"]
             .get("tool_timeout_sec")
             .is_none());
         let analysis = analysis_config(&config).unwrap();
         assert_eq!(analysis["mcp_servers"]["remote"]["enabled"], false);
-        assert_eq!(config["mcp_servers"]["local"]["enabled"], false);
-        assert_eq!(config["mcp_servers"]["local"]["enabled"], false);
+        assert_eq!(config["mcp_servers"]["local"]["enabled"], true);
+        assert_eq!(analysis["mcp_servers"]["local"]["enabled"], false);
         assert_eq!(
             config["mcp_servers"]["remote"]["url"],
             "https://example.com/mcp"

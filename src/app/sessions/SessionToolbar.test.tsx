@@ -6,15 +6,14 @@ import SessionToolbar from './SessionToolbar';
 
 afterEach(cleanup);
 
-it('dismisses session actions on Escape and outside interaction without closing the session', async () => {
+it('dismisses session actions on Escape and outside interaction without removing the session', async () => {
   const user = userEvent.setup();
-  const onClose = vi.fn();
+  const onRemove = vi.fn();
   render(
     <SessionToolbar
       sessionName="Investigation"
-      canClose
       showingFiles={false}
-      onClose={onClose}
+      onRemove={onRemove}
       onFiles={() => {}}
     />,
   );
@@ -30,24 +29,23 @@ it('dismisses session actions on Escape and outside interaction without closing 
   await user.click(trigger);
   await user.click(screen.getByRole('heading', { name: 'Investigation' }));
   expect(menu.open).toBe(false);
-  expect(onClose).not.toHaveBeenCalled();
+  expect(onRemove).not.toHaveBeenCalled();
 });
 
-it('closes the selected session without losing the menu click', async () => {
+it('removes the selected session without losing the menu click', async () => {
   const user = userEvent.setup();
-  const onClose = vi.fn();
+  const onRemove = vi.fn();
   render(
     <SessionToolbar
       sessionName="Investigation"
-      canClose
       showingFiles={false}
-      onClose={onClose}
+      onRemove={onRemove}
       onFiles={() => {}}
     />,
   );
   await user.click(screen.getByRole('button', { name: 'Session actions' }));
-  await user.click(screen.getByRole('button', { name: 'Close session' }));
-  expect(onClose).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole('button', { name: 'Remove session' }));
+  expect(onRemove).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('button', { name: 'Session actions' }).closest('details')!.open).toBe(
     false,
   );

@@ -1,3 +1,4 @@
+import type { ToolHooks } from '../integrations/cliTools';
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { claudeProvider, codexProvider } from '../integrations/claude';
@@ -8,6 +9,7 @@ import {
   type ToolActivity,
 } from '../evidence/investigation';
 import { useChatScroll } from './useChatScroll';
+import { useComposerAttachments } from './useComposerAttachments';
 import { CliConversation } from '../integrations/conversation';
 import { ensureCliSignIn } from '../integrations/signIn';
 import type { ToolApproval, McpStatus } from '../integrations/cliTools';
@@ -38,6 +40,7 @@ export function useAgentChat({
   const agentLabel = mode === 'hosted' ? hosted.model : mode === 'codex' ? 'Codex' : 'Claude Code';
   const executablePath = mode === 'codex' ? codexPath : claudePath;
   const repoSignature = JSON.stringify(repositories.map((r) => [r.id, r.name, r.path]));
+  const { composerAttachments, consumeAttachments } = useComposerAttachments(attachments);
   const [messages, setMessages] = useState<Message[]>([]);
   const [prompt, setPrompt] = useState('');
   const [stream, setStream] = useState('');
@@ -108,12 +111,12 @@ export function useAgentChat({
     };
   }, [mode, claudePath, codexPath]);
   useEffect(() => {
-    // Revoke an in-flight snapshot when evidence changes, but retain an idle
+    // Revoke an in-flight snapshot when selected repos/evidence change, but retain an idle
     // native thread so the next turn can send only the updated evidence.
     abort.current?.abort();
-  }, [context]);
+  }, [context, repoSignature]);
   const canSend =
-    !busy && !attachments?.busy && Boolean(prompt.trim() || attachments?.files.length);
+    !busy && !attachments?.busy && Boolean(prompt.trim() || composerAttachments?.files.length);
   function sendMessage() {
     if (!canSend) return;
     try {
@@ -121,11 +124,13 @@ export function useAgentChat({
       if (mode === 'claude') claudeProvider(claudePath);
       if (mode === 'codex') codexProvider(codexPath);
       const request: PendingRequest = {
+        attachmentIds: composerAttachments?.files.map((file) => file.id) ?? [],
         request: prepareRequest(
           messages,
           prompt.trim() || ATTACHED_FILES_PROMPT,
           context,
           sanitizer.current,
+          repositories.map((repository) => repository.name),
         ),
         config: { ...hosted },
         mode,
@@ -151,34 +156,35 @@ export function useAgentChat({
     let submitted = false;
     try {
       jumpToLatest();
+      const tools: ToolHooks = {
+        sanitize: (text) => sanitizer.current.sanitize(text, 'json', []),
+        status: setMcpServers,
+        activity: (item) => {
+          if (mounted.current)
+            setActivities((all) => ({
+              ...all,
+              [turnIndex]: updateActivity(all[turnIndex] ?? [], item),
+            }));
+        },
+        evidence: (source) => {
+          if (mounted.current) {
+            evidenceRef.current = [...evidenceRef.current, source];
+            setEvidence(evidenceRef.current);
+            onEvidence?.(source);
+          }
+        },
+        approve: (tool) =>
+          new Promise<boolean>((resolve) => {
+            toolDecision.current = resolve;
+            setToolApproval(tool);
+          }),
+      };
       const provider =
         snapshot.mode === 'hosted'
           ? hostedProvider(snapshot.config)
           : snapshot.mode === 'codex'
-            ? codexProvider(snapshot.executablePath, snapshot.turn, {
-                sanitize: (text) => sanitizer.current.sanitize(text, 'json', []),
-                status: setMcpServers,
-                activity: (item) => {
-                  if (mounted.current)
-                    setActivities((all) => ({
-                      ...all,
-                      [turnIndex]: updateActivity(all[turnIndex] ?? [], item),
-                    }));
-                },
-                evidence: (source) => {
-                  if (mounted.current) {
-                    evidenceRef.current = [...evidenceRef.current, source];
-                    setEvidence(evidenceRef.current);
-                    onEvidence?.(source);
-                  }
-                },
-                approve: (tool) =>
-                  new Promise<boolean>((resolve) => {
-                    toolDecision.current = resolve;
-                    setToolApproval(tool);
-                  }),
-              })
-            : claudeProvider(snapshot.executablePath, snapshot.turn);
+            ? codexProvider(snapshot.executablePath, snapshot.turn, tools)
+            : claudeProvider(snapshot.executablePath, snapshot.turn, tools);
       abort.current = new AbortController();
       const signal = abort.current.signal;
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -195,6 +201,7 @@ export function useAgentChat({
         submitted = true;
         setMessages(snapshot.request.messages);
         setPrompt((current) => (current === sentDraft ? '' : current));
+        consumeAttachments(snapshot.attachmentIds);
         const reply = await provider.complete(snapshot.request, abort.current.signal, (text) => {
           if (mounted.current) setStream(sanitizer.current.text(text));
         });
@@ -207,7 +214,7 @@ export function useAgentChat({
           const content = sanitizer.current.sanitize(JSON.stringify(parseReply(reply)), 'json', []);
           const title = parseReply(content).sessionTitle;
           if (title && !snapshot.request.messages.some((message) => message.role === 'assistant'))
-            onSessionTitle?.(title);
+            onSessionTitle?.(sanitizer.current.restore(title));
           const next: Message[] = [...snapshot.request.messages, { role: 'assistant', content }];
           if (snapshot.turn) conversationState.current.commit(snapshot.turn, next);
           setResponseSources((all) => ({
@@ -261,14 +268,21 @@ export function useAgentChat({
   }
   async function signInMcp(server: string) {
     try {
-      setNotice(await invoke<string>('codex_mcp_sign_in', { executablePath: codexPath, server }));
+      const agent = mode === 'claude' ? 'claude' : 'codex';
+      setNotice(
+        await invoke<string>(`${agent}_mcp_sign_in`, {
+          executablePath: agent === 'claude' ? claudePath : codexPath,
+          server,
+        }),
+      );
       conversationState.current.reset();
     } catch {
-      setNotice('Could not open MCP sign-in. Run Codex MCP login in your terminal.');
+      setNotice('Could not open MCP sign-in. Run your agent’s MCP login in your terminal.');
     }
   }
   return {
     agentLabel,
+    restoreText: (text: string) => sanitizer.current.restore(text),
     messages,
     prompt,
     setPrompt,
@@ -286,6 +300,7 @@ export function useAgentChat({
     busy,
     notice,
     composer,
+    composerAttachments,
     conversation,
     scrollPaused,
     jumpToLatest,

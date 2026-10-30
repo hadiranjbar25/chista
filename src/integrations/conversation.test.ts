@@ -37,7 +37,9 @@ it('isolates sessions and updates evidence without replaying instructions or his
   };
   const first = one.prepare('claude', '', request);
   const other = two.prepare('claude', '', request);
-  expect(first.systemPrompt).toContain('No tools are available');
+  expect(first.systemPrompt).toContain('installed Claude Code CLI');
+  expect(first.systemPrompt).toContain('native MCP tools');
+  expect(first.systemPrompt).not.toContain('No tools are available');
   expect(other.sessionKey).not.toBe(first.sessionKey);
   one.commit(first, [...request.messages, { role: 'assistant', content: 'Answer' }]);
   const history: Message[] = [...request.messages, { role: 'assistant', content: 'Answer' }];
@@ -116,4 +118,55 @@ it('does not mark a denied preview as delivered and reconnects after history is 
   const reset = session.prepare('codex', '', request);
   expect(reset.sessionKey).not.toBe(denied.sessionKey);
   expect(reset.systemPrompt).not.toBeNull();
+});
+
+it('sends repository names once and updates selection within the same native thread', () => {
+  const conversation = new CliConversation();
+  const question: Message = { role: 'user', content: 'What is the name of this repo?' };
+  const first = conversation.prepare('codex', '', {
+    messages: [question],
+    context: null,
+    repositoryNames: ['chista'],
+  });
+  expect(JSON.parse(first.payload).messages[0].content).toContain('"chista"');
+  const history: Message[] = [
+    question,
+    { role: 'assistant', content: 'The selected repository is chista.' },
+  ];
+  conversation.commit(first, history);
+  const followUp = conversation.prepare('codex', '', {
+    messages: [...history, { role: 'user', content: 'Continue' }],
+    context: null,
+    repositoryNames: ['chista'],
+  });
+  expect(followUp.sessionKey).toBe(first.sessionKey);
+  expect(JSON.parse(followUp.payload)).toEqual({
+    messages: [{ role: 'user', content: 'Continue' }],
+  });
+  const changed = conversation.prepare('codex', '', {
+    messages: [...history, { role: 'user', content: 'Which repo now?' }],
+    context: null,
+    repositoryNames: ['payments'],
+  });
+  expect(changed.sessionKey).toBe(first.sessionKey);
+  expect(changed.systemPrompt).toBeNull();
+  expect(changed.payload).toContain('payments');
+  expect(changed.payload).not.toContain('chista');
+  expect(changed.payload).not.toContain('What is the name');
+  conversation.commit(changed, [
+    ...history,
+    { role: 'user', content: 'Which repo now?' },
+    { role: 'assistant', content: 'payments' },
+  ]);
+  const removed = conversation.prepare('codex', '', {
+    messages: [
+      ...history,
+      { role: 'user', content: 'Which repo now?' },
+      { role: 'assistant', content: 'payments' },
+      { role: 'user', content: 'And now?' },
+    ],
+    context: null,
+  });
+  expect(removed.sessionKey).toBe(first.sessionKey);
+  expect(removed.payload).toContain('No repository folders are currently selected');
 });

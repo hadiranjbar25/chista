@@ -193,7 +193,15 @@ pub(crate) fn launch_native_sign_in(binary: PathBuf, args: &[&str]) -> Result<St
 }
 
 #[tauri::command]
+pub fn claude_mcp_sign_in(executable_path: String, server: String) -> Result<String, String> {
+    mcp_sign_in(executable_path, server, "claude")
+}
+
+#[tauri::command]
 pub fn codex_mcp_sign_in(executable_path: String, server: String) -> Result<String, String> {
+    mcp_sign_in(executable_path, server, "codex")
+}
+fn mcp_sign_in(executable_path: String, server: String, agent: &str) -> Result<String, String> {
     if server.is_empty()
         || server.len() > 100
         || !server
@@ -203,7 +211,7 @@ pub fn codex_mcp_sign_in(executable_path: String, server: String) -> Result<Stri
         return Err("Invalid MCP server name.".into());
     }
     launch_native_sign_in(
-        resolve_cli(&executable_path, "codex")?,
+        resolve_cli(&executable_path, agent)?,
         &["mcp", "login", &server],
     )
 }

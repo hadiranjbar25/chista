@@ -8,8 +8,12 @@ export function claudePayload(request: ModelRequest): string {
 }
 
 type ClaudeEvent = { type: 'started' } | { type: 'delta' | 'replace'; text: string } | ToolEvent;
-export function claudeProvider(executablePath: string, turn?: NativeTurn): ModelProvider {
-  return cliProvider('claude', executablePath, turn);
+export function claudeProvider(
+  executablePath: string,
+  turn?: NativeTurn,
+  tools?: ToolHooks,
+): ModelProvider {
+  return cliProvider('claude', executablePath, turn, tools);
 }
 export function codexProvider(
   executablePath: string,

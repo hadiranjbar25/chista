@@ -33,6 +33,15 @@ export class Sanitizer {
   mappings(): RedactionMapping[] {
     return [...this.values].map(([original, placeholder]) => ({ original, placeholder }));
   }
+  // Local display only. Keep model history, evidence and outbound payloads masked.
+  restore(text: string): string {
+    const originals = new Map([...this.values].map(([value, placeholder]) => [placeholder, value]));
+    // One pass prevents values containing another placeholder from being expanded again.
+    return text.replace(
+      PLACEHOLDER_OCCURRENCES,
+      (placeholder) => originals.get(placeholder) ?? placeholder,
+    );
+  }
   placeholder(value: string, kind: string) {
     if (!value || PLACEHOLDER.test(value)) return value;
     const existing = this.values.get(value);
@@ -49,10 +58,11 @@ export class Sanitizer {
       text = text.split(term).join(this.placeholder(term, 'CUSTOM'));
     text = text.replace(PRIVATE_KEY, (v) => this.placeholder(v, 'SECRET'));
     text = text.replace(BEARER_TOKEN, (_, v: string) => `Bearer ${this.placeholder(v, 'SECRET')}`);
-    text = text.replace(SENSITIVE_ASSIGNMENT, (_, key: string, sep: string, v: string) =>
-      key.toLowerCase() === 'authorization' &&
-      AUTHORIZATION_DECISION.test(v.replace(/^["']|["']$/g, ''))
-        ? `${key}${sep}${v}`
+    text = text.replace(SENSITIVE_ASSIGNMENT, (match, key: string, sep: string, v: string) =>
+      PLACEHOLDER.test(v.replace(/^["']|["']$/g, '').replace(/[.!?]+$/, '')) ||
+      (key.toLowerCase() === 'authorization' &&
+        AUTHORIZATION_DECISION.test(v.replace(/^["']|["']$/g, '')))
+        ? match
         : `${key}${sep}${this.placeholder(v.replace(/^["']|["']$/g, ''), 'SENSITIVE')}`,
     );
     // Support log assignments and quoted JSON fields in messages or tool text.

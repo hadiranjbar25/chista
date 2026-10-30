@@ -5,6 +5,7 @@ import type { NativeTurn } from '../integrations/conversation';
 import type { HostedConfig, ModelRequest } from '../integrations/providers';
 
 export type PendingRequest = {
+  attachmentIds: string[];
   request: ModelRequest;
   config: HostedConfig;
   mode: string;

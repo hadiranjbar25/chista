@@ -10,6 +10,40 @@ const file = (raw: string, format = 'log'): Artifact => ({
   redactions: 0,
 });
 describe('local safety pipeline', () => {
+  it('restores exact masks locally without changing mappings or sanitized exports', () => {
+    const sanitizer = new Sanitizer('WORKSPACE');
+    const raw = JSON.stringify({
+      name: 'chista',
+      id: 'repo-123',
+      password: 'secret-value',
+      email: 'alex@example.com',
+    });
+    const safe = sanitizer.sanitize(raw, 'json', ['custom-value']);
+    const mappings = sanitizer.mappings();
+    for (const { original, placeholder } of mappings)
+      expect(sanitizer.restore(`Value: ${placeholder}; ${placeholder}`)).toBe(
+        `Value: ${original}; ${original}`,
+      );
+    expect(sanitizer.restore('[UNKNOWN_1] [WORKSPACE_EMAIL_10] [WORKSPACE_EMAIL_')).toBe(
+      '[UNKNOWN_1] [WORKSPACE_EMAIL_10] [WORKSPACE_EMAIL_',
+    );
+    expect(sanitizer.restore('[WORKSPACE_EMAIL_1]')).toBe('alex@example.com');
+    expect(sanitizer.mappings()).toEqual(mappings);
+    expect(sanitizer.sanitize(raw, 'json', ['custom-value'])).toBe(safe);
+    expect(sanitizer.text('custom-value', ['custom-value'])).toBe('[WORKSPACE_CUSTOM_1]');
+    expect(sanitizer.restore('[WORKSPACE_CUSTOM_1]')).toBe('custom-value');
+    expect(sanitizer.text('Repository name: [WORKSPACE_SENSITIVE_1].')).toContain(
+      '[WORKSPACE_SENSITIVE_1].',
+    );
+  });
+
+  it('restores in one pass even when an original value contains another mask', () => {
+    const sanitizer = new Sanitizer();
+    sanitizer.placeholder('a "quoted" value\n[EMAIL_1]', 'SENSITIVE');
+    sanitizer.placeholder('alex@example.com', 'EMAIL');
+    expect(sanitizer.restore('[SENSITIVE_1]')).toBe('a "quoted" value\n[EMAIL_1]');
+  });
+
   it('masks identifier fields at every JSON depth, including numeric IDs and arrays', () => {
     const sanitizer = new Sanitizer();
     const safe = JSON.parse(

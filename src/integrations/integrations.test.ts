@@ -56,4 +56,32 @@ describe('outgoing integration boundaries', () => {
       provider.complete({ messages: [], context: null }, new AbortController().signal),
     ).rejects.toThrow('HTTP 401');
   });
+  it('includes sanitized selected repository names in hosted context without reading files', () => {
+    const request = prepareRequest([], 'What is the name of this repo?', null, new Sanitizer(), [
+      ' chista ',
+      'chista',
+      'alex@example.com',
+    ]);
+    expect(request.repositoryNames).toEqual(['chista', '[EMAIL_1]']);
+    const body = hostedBody('hosted-debugger', request);
+    const repositoryMessage = body.messages.find((message) =>
+      message.content.startsWith('Selected workspace repository names'),
+    );
+    expect(repositoryMessage?.content).toContain('"chista"');
+    expect(repositoryMessage?.content).not.toContain('alex@example.com');
+    expect(repositoryMessage?.content).toContain('repository files are not included');
+  });
+  it('keeps repository metadata, chat history and context masked at the provider boundary', () => {
+    const sanitizer = new Sanitizer();
+    const context = sanitizer.sanitize('{"name":"chista"}', 'json', []);
+    const request = prepareRequest([], 'Repository name: chista', context, sanitizer, ['chista']);
+    expect(request.repositoryNames).toEqual(['[SENSITIVE_1]']);
+    expect(request.messages[0].content).not.toContain('chista');
+    expect(request.context).toBe(context);
+    expect(request.context).not.toContain('chista');
+    sanitizer.sanitize('{"user_id":"chista"}', 'json', []);
+    expect(prepareRequest([], 'chista', context, sanitizer, ['chista']).repositoryNames).toEqual([
+      '[SENSITIVE_1]',
+    ]);
+  });
 });

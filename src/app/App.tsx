@@ -92,6 +92,22 @@ export default function App() {
     setSessionTab('chat');
     setRoute('Sessions');
   }
+  function removeSession() {
+    const remaining = workspaceSessions.filter((item) => item.id !== sessionId);
+    const next = remaining[0] ?? newSession('Debug session 1', workspaceId);
+    setSessions((all) => {
+      const kept = all.filter((item) => item.id !== sessionId);
+      return remaining.length ? kept : [...kept, next];
+    });
+    setSessionId(next.id);
+    setSessionTab('chat');
+    setRoute('Sessions');
+    setNotice(
+      remaining.length
+        ? 'Session removed. Workspace files were kept.'
+        : 'Session removed. Started a fresh session. Workspace files were kept.',
+    );
+  }
   return (
     <div className="ide">
       <AppSidebar
@@ -161,14 +177,8 @@ export default function App() {
             <SessionToolbar
               key={sessionId + sessionTab}
               sessionName={session.name}
-              canClose={workspaceSessions.length > 1}
               showingFiles={sessionTab === 'safe'}
-              onClose={() => {
-                const next = workspaceSessions.find((item) => item.id !== sessionId);
-                if (!next) return;
-                setSessions((all) => all.filter((item) => item.id !== sessionId));
-                setSessionId(next.id);
-              }}
+              onRemove={removeSession}
               onFiles={() => {
                 setSessionTab('safe');
                 setRoute('Sessions');

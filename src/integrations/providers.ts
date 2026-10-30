@@ -3,8 +3,13 @@ import { readChatStream } from './stream';
 import { desktopFetch, endpoint } from './transport';
 import { uiInstructions } from './uiInstructions';
 import { Sanitizer } from '../evidence/safety';
+import { repositoryContext } from './repositoryContext';
 export type Message = { role: 'user' | 'assistant'; content: string };
-export type ModelRequest = { messages: Message[]; context: string | null };
+export type ModelRequest = {
+  messages: Message[];
+  context: string | null;
+  repositoryNames?: string[];
+};
 export interface ModelProvider {
   id: string;
   label: string;
@@ -53,18 +58,27 @@ export function hostedProvider(
   };
 }
 // The provider boundary accepts only strings from the reviewed snapshot and sanitized composer/history.
-// It deliberately has no Artifact, file reader, filename, filesystem path or raw-file parameter.
+// Repository display names are explicit metadata; paths, IDs and file contents never enter here.
 export function prepareRequest(
   history: Message[],
   prompt: string,
   context: string | null,
   sanitizer: Sanitizer,
+  repositoryNames: readonly string[] = [],
 ): ModelRequest {
   const messages = [...history, { role: 'user' as const, content: prompt }];
   messages.forEach((m) => sanitizer.text(m.content));
+  repositoryNames.forEach((name) => sanitizer.text(name));
+  const names = [
+    ...new Set(repositoryNames.map((name) => sanitizer.text(name.trim())).filter(Boolean)),
+  ];
   return {
-    messages: messages.map((m) => ({ role: m.role, content: sanitizer.text(m.content) })),
+    messages: messages.map((m) => ({
+      role: m.role,
+      content: sanitizer.text(m.content),
+    })),
     context,
+    ...(names.length ? { repositoryNames: names } : {}),
   };
 }
 
@@ -81,6 +95,9 @@ export function hostedBody(model: string, request: ModelRequest) {
           ' ' +
           uiInstructions,
       },
+      ...(request.repositoryNames?.length
+        ? [{ role: 'user', content: repositoryContext(request.repositoryNames) }]
+        : []),
       ...(request.context
         ? [{ role: 'user', content: `Sanitized debug context:\n${request.context}` }]
         : []),

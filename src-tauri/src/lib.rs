@@ -25,6 +25,7 @@ pub fn run() {
             repositories::select_repository_folder,
             persistent::mcp::respond_agent_tool,
             claude::codex_mcp_sign_in,
+            claude::claude_mcp_sign_in,
             persistent::agent_session_chat,
             persistent::close_agent_session,
             claude::claude_status,

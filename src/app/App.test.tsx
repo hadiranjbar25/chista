@@ -332,7 +332,7 @@ it('opens Files & mappings directly from the page toolbar', async () => {
   expect(
     screen.getByRole('button', { name: 'Files & mappings' }).closest('.workspace-toolbar'),
   ).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Session actions' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Session actions' })).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Files & mappings' }));
   expect(screen.getByRole('button', { name: 'Mappings' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Back to chat' })).toBeNull();
@@ -358,7 +358,7 @@ it('isolates workspace evidence and drafts while preserving evidence after closi
     (screen.getByRole('textbox', { name: 'Message agent' }) as HTMLTextAreaElement).value,
   ).toBe('');
   expect(screen.getByRole('button', { name: 'Remove attachment shared.csv' })).toBeTruthy();
-  await clickAction(user, 'Close session');
+  await clickAction(user, 'Remove session');
   expect(
     (screen.getByRole('textbox', { name: 'Message agent' }) as HTMLTextAreaElement).value,
   ).toBe('First investigation');

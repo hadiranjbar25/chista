@@ -40,7 +40,7 @@
 .focus-panel > .focus-tools {
   position: absolute;
   top: 24px;
-  right: 12px;
+  right: var(--space-3);
   z-index: 1;
 }
 .focus-widget > .focus-content > .response-widget > :first-child,
@@ -51,11 +51,21 @@
   top: 18px;
 }
 .focus-chat {
-  max-width: 860px;
+  max-width: var(--chat-width);
   margin: auto;
 }
 .focus-chat > .focus-tools {
-  margin-bottom: -12px;
+  margin-bottom: 0;
+}
+.focus-page > .focus-tools,
+.embedded-safe > .focus-section > .focus-tools {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+}
+.focus-page .page-heading {
+  padding-right: 40px;
 }
 .fullscreen-ancestor {
   z-index: 1000 !important;
@@ -102,7 +112,7 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 24px;
+  padding: var(--page-gutter);
 }
 .focus-section.is-fullscreen > .focus-content > .response-widget {
   margin: 0;
@@ -146,4 +156,14 @@
 }
 .focus-section.is-fullscreen > .focus-content > .response-input > button {
   align-self: flex-start;
+}
+
+@media (max-width: 650px) {
+  .focus-panel > .focus-tools {
+    top: 10px;
+    right: var(--space-2);
+  }
+  .focus-widget:has(> .focus-content > .response-widget) > .focus-tools {
+    right: var(--space-2);
+  }
 }

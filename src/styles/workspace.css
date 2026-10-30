@@ -7,8 +7,8 @@
 .ide-nav {
   position: fixed;
   inset: 0 auto 0 0;
-  width: 224px;
-  padding: 28px 17px;
+  width: var(--sidebar-width);
+  padding: var(--space-5) var(--space-4);
   background: #f3f4f8;
   border-right: 1px solid #e3e5ed;
   display: flex;
@@ -93,11 +93,12 @@
   font-size: 9px;
 }
 .ide-body {
-  margin-left: 224px;
+  margin-left: var(--sidebar-width);
   min-width: 0;
 }
 .ide-header {
-  padding: 0 30px;
+  height: var(--header-height);
+  padding: 0 var(--page-gutter);
   gap: 15px;
   position: sticky;
   top: 0;
@@ -106,15 +107,16 @@
 .ide-header > div {
   font-size: 11px;
   color: #7a7388;
-  display: flex;
-  gap: 12px;
+  display: block;
 }
 .ide-header > div > span {
   color: #c3bdcc;
+  margin-inline: var(--space-3);
 }
 .ide-content {
-  padding: 28px 30px;
-  max-width: 1500px;
+  padding: var(--space-5) var(--page-gutter);
+  max-width: calc(var(--content-width) + 2 * var(--page-gutter));
+  display: flow-root;
   margin: auto;
 }
 .view-title p {
@@ -123,8 +125,8 @@
 }
 .management-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
 }
 .field {
   display: flex;
@@ -329,7 +331,7 @@ details > p {
 }
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 .server-card {
@@ -373,13 +375,14 @@ details > p {
 .settings-list > div {
   display: flex;
   justify-content: space-between;
-  gap: 35px;
+  gap: var(--space-5);
   border-top: 1px solid #ede8f0;
-  padding: 23px 0;
+  padding: var(--space-5) 0;
   font-size: 12px;
 }
 .settings-list > div > strong {
   width: 230px;
+  max-width: 100%;
   flex-shrink: 0;
   font-weight: 550;
 }
@@ -396,15 +399,6 @@ details > p {
   margin-top: 18px;
 }
 @media (max-width: 1100px) {
-  .ide-nav {
-    width: 195px;
-  }
-  .ide-body {
-    margin-left: 195px;
-  }
-  .ide-content {
-    padding: 23px;
-  }
   .embedded-safe .workspace-grid {
     grid-template-columns: 1fr;
   }
@@ -416,10 +410,6 @@ details > p {
   }
 }
 @media (max-width: 750px) {
-  .ide-nav {
-    width: 150px;
-    padding: 20px 10px;
-  }
   .ide-nav .brand {
     font-size: 24px;
   }
@@ -428,18 +418,6 @@ details > p {
   }
   .ide-nav .beta {
     display: none;
-  }
-  .ide-body {
-    margin-left: 150px;
-  }
-  .ide-content {
-    padding: 18px;
-  }
-  .ide-header {
-    padding: 12px;
-    align-items: start;
-    height: auto;
-    flex-direction: column;
   }
   .workspace-toolbar,
   .chat-view > .section-heading {
@@ -469,7 +447,7 @@ details > p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: var(--space-5);
 }
 .mapping-controls > .field {
   flex: 1;
@@ -557,9 +535,6 @@ details > p {
   max-width: 420px;
 }
 /* Conversation-first workspace */
-.ide-header {
-  height: 60px;
-}
 .header-actions {
   margin-left: auto;
   display: flex;
@@ -569,12 +544,6 @@ details > p {
 .header-actions button {
   border: 0;
   background: transparent;
-}
-.ide-nav {
-  width: 205px;
-}
-.ide-body {
-  margin-left: 205px;
 }
 .ide-nav .new-chat {
   justify-content: flex-start;
@@ -588,12 +557,9 @@ details > p {
 .ide-nav .ide-privacy > svg {
   display: none;
 }
-.ide-content {
-  padding: 18px 30px;
-}
 .workspace-toolbar {
-  max-width: 1000px;
-  margin: 0 auto 14px;
+  max-width: var(--chat-width);
+  margin: 0 auto var(--space-4);
 }
 .workspace-toolbar h2 {
   font-size: 13px;
@@ -604,8 +570,10 @@ details > p {
   padding: 7px 10px;
 }
 .chat-view {
-  max-width: 860px;
-  min-height: calc(100vh - 150px);
+  max-width: var(--chat-width);
+  min-height: calc(
+    100dvh - var(--header-height) - 2 * var(--space-5) - var(--space-6) - var(--space-4) - 28px
+  );
   display: flex;
   flex-direction: column;
 }
@@ -627,11 +595,13 @@ details > p {
   overflow: visible;
   flex: 1;
   min-height: 260px;
-  padding: 25px 0;
+  padding: var(--space-4) 0;
 }
 .chat-welcome {
   text-align: center;
-  padding: 70px 10px 40px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 64px var(--space-4) var(--space-6);
 }
 .welcome-mark {
   font-size: 52px;
@@ -662,13 +632,13 @@ details > p {
 .chat-view .message {
   border: 0;
   background: transparent;
-  padding: 18px 10px;
+  padding: var(--space-4) var(--space-2);
 }
 .chat-view .message.user {
   background: #f0edf5;
   border-radius: 14px;
   margin-left: 14%;
-  padding: 16px 20px;
+  padding: var(--space-4);
 }
 .chat-view .message p {
   font-size: 13px;
@@ -688,9 +658,9 @@ details > p {
   box-shadow: 0 8px 30px #3120430a;
   background: #fff;
   border-radius: 16px;
-  padding: 14px;
+  padding: var(--space-4);
   z-index: 1;
-  margin-top: 16px;
+  margin-top: var(--space-4);
 }
 .chat-composer textarea {
   display: block;
@@ -745,8 +715,8 @@ details > p {
   background: #fff;
   border: 1px solid #e7e1ed;
   border-radius: 10px;
-  padding: 18px;
-  margin: 16px 0;
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
 }
 .response-widget > h3 {
   margin-bottom: 15px;
@@ -790,10 +760,11 @@ details > p {
   display: none;
 }
 .embedded-safe main {
-  max-width: 1000px;
+  max-width: var(--content-width);
 }
 .embedded-safe .tabs {
-  margin-top: 20px;
+  margin-top: 0;
+  padding-right: 40px;
 }
 .embedded-safe .section-heading .count {
   font-size: 10px;
@@ -805,15 +776,6 @@ details > p {
   height: 150px;
 }
 @media (max-width: 850px) {
-  .ide-nav {
-    width: 165px;
-  }
-  .ide-body {
-    margin-left: 165px;
-  }
-  .ide-content {
-    padding: 16px;
-  }
   .chat-welcome {
     padding-top: 40px;
   }
@@ -889,11 +851,11 @@ details > p {
 }
 
 .agent-settings {
-  max-width: 780px;
+  max-width: var(--content-width);
   margin: 0 auto;
 }
 .agent-settings .page-heading {
-  margin-bottom: 18px;
+  margin-bottom: var(--space-5);
 }
 .agent-settings .page-heading h1 {
   font-size: 25px;
@@ -950,12 +912,12 @@ details > p {
   transform: rotate(180deg);
 }
 .agent-setting-body {
-  padding: 0 16px 16px;
+  padding: var(--space-4);
   border-top: 1px solid #f0edf5;
 }
 .agent-setting-body .field {
-  margin: 12px 0;
-  gap: 6px;
+  margin: 0 0 var(--space-4);
+  gap: var(--space-2);
 }
 .agent-setting-body button {
   padding: 8px 10px;
@@ -1257,7 +1219,8 @@ details > p {
   padding: 6px 10px;
   overflow-wrap: anywhere;
 }
-.session-actions-list > button[aria-label='Close session'] {
+.session-actions-list > button[aria-label='Remove session'] {
+  color: #b43f52;
   border-top: 1px solid #eee8f8;
   border-radius: 0;
   margin-top: 4px;
@@ -1544,4 +1507,66 @@ details > p {
   font-weight: 600;
   color: #8c7b9a;
   margin-bottom: 12px;
+}
+
+/* Shared gutters keep section controls aligned with their content. */
+.workspace-toolbar-files {
+  max-width: var(--content-width);
+}
+.workspace-toolbar > h2 {
+  min-width: 0;
+}
+.management-grid > .focus-section {
+  min-width: 0;
+}
+.ide-content .page-heading {
+  margin-bottom: var(--space-5);
+}
+.panel > button {
+  max-width: 100%;
+}
+.agent-setting-body > :last-child {
+  margin-bottom: 0;
+}
+@media (max-width: 650px) {
+  .ide-nav {
+    padding: var(--space-4) var(--space-3);
+  }
+  .ide-nav .sidebar-brand .brand {
+    font-size: 22px;
+  }
+  .ide-nav .brand-mark {
+    font-size: 28px;
+  }
+  .ide-nav .nav-label {
+    margin: var(--space-4) 0 0;
+    font-size: 8px;
+  }
+  .chat-welcome {
+    padding: var(--space-6) 0;
+  }
+  .chat-welcome h1 {
+    font-size: 24px;
+  }
+  .chat-view .message.user {
+    margin-left: var(--space-4);
+  }
+  .session-tabs {
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+  }
+}
+@media (max-width: 520px) {
+  .workspace-toolbar > .workspace-files-button {
+    margin-left: 0;
+  }
+  .composer-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .composer-actions > button {
+    justify-self: end;
+  }
+  .sidebar-footer .ide-privacy > span {
+    overflow-wrap: anywhere;
+  }
 }

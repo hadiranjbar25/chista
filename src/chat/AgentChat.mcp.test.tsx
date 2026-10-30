@@ -26,57 +26,60 @@ it('keeps a native thread when an unrelated configured MCP server is unavailable
   expect(native.close).not.toHaveBeenCalled();
 });
 
-it('reviews sanitized MCP arguments and returns only sanitized tool data to Codex', async () => {
-  let event!: (event: unknown) => void;
-  let finish!: (text: string) => void;
-  native.invoke.mockImplementation((command, args) => {
-    if (command === 'respond_agent_tool') return Promise.resolve();
-    expect(command).toBe('agent_session_chat');
-    event = args.onEvent.onmessage;
-    args.onEvent.onmessage({ type: 'started' });
-    return new Promise((resolve) => {
-      finish = resolve;
+it.each(['claude', 'codex'])(
+  'reviews sanitized MCP arguments and returns only sanitized tool data to %s',
+  async (mode) => {
+    let event!: (event: unknown) => void;
+    let finish!: (text: string) => void;
+    native.invoke.mockImplementation((command, args) => {
+      if (command === 'respond_agent_tool') return Promise.resolve();
+      expect(command).toBe('agent_session_chat');
+      event = args.onEvent.onmessage;
+      args.onEvent.onmessage({ type: 'started' });
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
     });
-  });
-  const user = userEvent.setup();
-  render(<AgentChat {...props} mode="codex" />);
-  await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Search MCP{Enter}');
+    const user = userEvent.setup();
+    render(<AgentChat {...props} mode={mode} />);
+    await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Search MCP{Enter}');
 
-  await act(async () =>
-    event({
-      type: 'tool_approval',
-      id: 'approve-one',
-      server: 'rag-e-khab',
-      tool: 'search',
-      arguments: { query: 'alex@example.com' },
-    }),
-  );
-  const dialog = screen.getByRole('dialog', { name: 'Approve MCP tool' });
-  expect(dialog.textContent).not.toContain('alex@example.com');
-  expect(dialog.textContent).toContain('[CHAT_EMAIL_1]');
-  await user.click(screen.getByRole('button', { name: 'Approve tool once' }));
-  expect(native.invoke).toHaveBeenCalledWith(
-    'respond_agent_tool',
-    expect.objectContaining({
-      id: 'approve-one',
-      response: { approved: true, arguments: { query: '[CHAT_EMAIL_1]' } },
-    }),
-  );
-  await act(async () =>
-    event({
-      type: 'tool_result',
-      id: 'result-one',
-      result: { content: [{ type: 'text', text: 'alex@example.com' }] },
-    }),
-  );
-  const reply = native.invoke.mock.calls.find(
-    ([command, args]) => command === 'respond_agent_tool' && args.id === 'result-one',
-  )![1];
-  expect(reply.response.content).not.toContain('alex@example.com');
-  expect(reply.response.content).toContain('[CHAT_EMAIL_1]');
-  await act(async () => finish('{"text":"Lookup complete","blocks":[]}'));
-  expect(screen.getByText('Lookup complete')).toBeTruthy();
-});
+    await act(async () =>
+      event({
+        type: 'tool_approval',
+        id: 'approve-one',
+        server: 'rag-e-khab',
+        tool: 'search',
+        arguments: { query: 'alex@example.com' },
+      }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Approve MCP tool' });
+    expect(dialog.textContent).not.toContain('alex@example.com');
+    expect(dialog.textContent).toContain('[CHAT_EMAIL_1]');
+    await user.click(screen.getByRole('button', { name: 'Approve tool once' }));
+    expect(native.invoke).toHaveBeenCalledWith(
+      'respond_agent_tool',
+      expect.objectContaining({
+        id: 'approve-one',
+        response: { approved: true, arguments: { query: '[CHAT_EMAIL_1]' } },
+      }),
+    );
+    await act(async () =>
+      event({
+        type: 'tool_result',
+        id: 'result-one',
+        result: { content: [{ type: 'text', text: 'alex@example.com' }] },
+      }),
+    );
+    const reply = native.invoke.mock.calls.find(
+      ([command, args]) => command === 'respond_agent_tool' && args.id === 'result-one',
+    )![1];
+    expect(reply.response.content).not.toContain('alex@example.com');
+    expect(reply.response.content).toContain('[CHAT_EMAIL_1]');
+    await act(async () => finish('{"text":"Lookup complete","blocks":[]}'));
+    expect(screen.getByText('Lookup complete')).toBeTruthy();
+  },
+);
 
 it('offers native Codex MCP sign-in for unauthenticated servers', async () => {
   native.invoke.mockImplementation(async (command, args) => {
@@ -230,4 +233,30 @@ it('retains denied and interrupted calls without claiming they completed', async
   expect(await screen.findByText('Cancelled')).toBeTruthy();
   expect(screen.queryByText('Completed')).toBeNull();
   expect(screen.getByText('Denied')).toBeTruthy();
+});
+
+it('shows Claude MCP connection status and native authentication guidance', async () => {
+  native.invoke.mockImplementation(async (command, args) => {
+    if (command === 'claude_mcp_sign_in') return 'Complete sign-in in Terminal.';
+    args.onEvent.onmessage({ type: 'started' });
+    args.onEvent.onmessage({
+      type: 'mcp_status',
+      servers: [
+        { name: 'connected', authStatus: 'unsupported', available: true, failed: false },
+        { name: 'needs-auth', authStatus: 'notLoggedIn', available: false, failed: false },
+      ],
+    });
+    return '{"text":"Check the server sign-in.","blocks":[]}';
+  });
+  const user = userEvent.setup();
+  render(<AgentChat {...props} mode="claude" />);
+  await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Connect MCP{Enter}');
+  await screen.findByText('Check the server sign-in.');
+  expect(screen.getByText('MCP connections · 1 available')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Sign in' }));
+  expect(native.invoke).toHaveBeenCalledWith('claude_mcp_sign_in', {
+    executablePath: '',
+    server: 'needs-auth',
+  });
+  expect(native.close).toHaveBeenCalled();
 });

@@ -66,7 +66,7 @@ it('takes a sanitized session title from the first agent response only', async (
 
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Debug timeout{Enter}');
   await screen.findByText('First answer');
-  expect(onSessionTitle).toHaveBeenCalledWith('Timeout for [CHAT_EMAIL_1]');
+  expect(onSessionTitle).toHaveBeenCalledWith('Timeout for alex@example.com');
   await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Continue{Enter}');
   await screen.findByText('Next answer');
   expect(onSessionTitle).toHaveBeenCalledTimes(1);

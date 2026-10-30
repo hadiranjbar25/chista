@@ -33,21 +33,27 @@ Install Codex or Claude Code on the destination computer and complete its native
 3. For a hosted provider, enter an HTTPS chat-completions endpoint, model identifier, and API token, then select **Use hosted provider**. Configuration is kept in memory for this app run. The first request verifies access; saving the settings alone does not test connectivity.
 4. Open **Workspace config**, add a repository folder, and start a **New session**. Attach evidence with **Add files**, inspect **Files & mappings**, and send a question.
 
-Codex MCP uses that computer's CLI configuration. HTTPS and loopback HTTP servers are supported; local services must be running. Stdio servers and Claude MCP are not supported yet. Each MCP tool call requires approval. For a complete example, follow the [access-investigation guide](INVESTIGATION.md).
+Claude Code and Codex offer the same in-app capabilities: streaming conversation, reviewed attachments, interactive response blocks, HTTP API requests, and MCP tools with approval, sanitized evidence and connection status. Both support configured stdio servers and HTTPS or loopback HTTP MCP connections. Local services must be running. Servers come from each CLI's user configuration; project and plugin configurations are not loaded in the isolated chat directory. Use the **Sign in** button in chat to open the selected CLI's native MCP login, then send a new message to start a fresh connection. Each tool call requires approval even when message preview is off. Claude MCP transport failures end the turn before an unsanitized native error can reach the model. For a complete example, follow the [access-investigation guide](INVESTIGATION.md).
 
 Workspaces and CLI credentials are not transferred with the installer. Add the new computer's repo folders in Workspace config.
+
+Selected repository folder names are included as sanitized chat metadata, so the agent can answer which repository is selected. Full paths, internal repository IDs, and repository files remain local. Changing the repository selection updates its metadata in the existing CLI conversation.
+
+Agent responses restore known placeholders using the workspace's local mask mapping for display, including streamed text and interactive response content. The model receives masked values; conversation history, file exports, and tool results remain sanitized. Unknown placeholders stay unchanged. Restored values are sanitized again if used in a follow-up message.
 
 ### Sending messages and calling APIs
 
 **Review before sending** is off by default. Messages send immediately after local sanitization; turn the checkbox on when you want an outgoing-message preview. API and MCP tool approvals are separate and remain required.
 
+After submission, the composer clears the sent message and file chips immediately. The imported files remain in **Files & mappings**, and the CLI retains their delivered context for follow-ups. Sending an empty composer does not resend previously submitted attachments. New debug sessions can still use the workspace's files.
+
 Codex and Claude Code keep a native CLI session for each debug conversation. Initial instructions, conversation history, and attached evidence are sent when that session starts. Follow-ups send only the next message. Changing attachments sends a replacement evidence snapshot in the same session; an unchanged snapshot is not sent again. Changing the agent or executable, or recovering from a failed/cancelled connection, starts a new native session and may require the sanitized history again. Hosted chat-completions providers are stateless and still receive the required conversation on every request.
 
-With **Codex**, ask for an HTTP(S) API call or a curl request. Chista exposes `chista_http_request`, which uses your computer's curl executable. Review the method, URL, headers, and text body in **Approve API request**, then approve once or deny. **Stop** cancels the running request. HTTP error statuses such as 403 are returned as evidence rather than invented successes.
+With **Claude Code or Codex**, ask for an HTTP(S) API call or a curl request. Chista exposes `chista_http_request`, which uses your computer's curl executable. Review the method, URL, headers, and text body in **Approve API request**, then approve once or deny. **Stop** cancels the running request. HTTP error statuses such as 403 are returned as evidence rather than invented successes.
 
-This API tool supports GET, HEAD, POST, PUT, PATCH, DELETE, and OPTIONS, with a 30-second curl timeout and a 1 MB response limit. It does not follow redirects, read local files, load curl configuration files, or run arbitrary shell commands. JSON/text responses pass through the workspace sanitizer before reaching Codex; non-text responses are omitted. It works without configuring an MCP server. Install curl separately if it is missing from your system.
+This API tool supports GET, HEAD, POST, PUT, PATCH, DELETE, and OPTIONS, with a 30-second curl timeout and a 1 MB response limit. It does not follow redirects, read local files, load curl configuration files, or run arbitrary shell commands. JSON/text responses pass through the workspace sanitizer before reaching either agent; non-text responses are omitted. It works without configuring an MCP server. Install curl separately if it is missing from your system.
 
-Sensitive placeholders in approved URLs, headers, and bodies are sent exactly as shown. Chista does not reverse placeholders into original credentials or identifiers, so a masked credential will not authenticate a request. Claude Code and hosted providers do not expose this API tool.
+Sensitive placeholders in approved URLs, headers, and bodies are sent exactly as shown. Chista does not reverse placeholders into original credentials or identifiers, so a masked credential will not authenticate a request. Both Claude Code and Codex expose this API tool with the same approval and sanitization flow. Hosted providers do not expose tools.
 
 ## Build an installer
 
@@ -164,4 +170,6 @@ See [Tauri distribution](https://v2.tauri.app/distribute/) for platform packagin
 | Hosted provider configuration and API token                        | Cleared; configure the provider again.                   |
 | CLI sign-in and MCP configuration                                  | Managed separately by the installed CLI, outside Chista. |
 
-Closing a debug session keeps its workspace's evidence available to other sessions during the same app run. Copying an installer does not transfer workspace data or CLI credentials. Adding a repository records its folder metadata; Chista does not automatically read or upload its files.
+Use **Session actions (⋯) → Remove session** to remove a debug conversation and its draft. This stops its active request and releases its CLI connection. Removing the last session starts a fresh one. Workspace files and mappings remain available during the same app run.
+
+Copying an installer does not transfer workspace data or CLI credentials. Adding a repository records its folder metadata; Chista does not automatically read or upload its files.

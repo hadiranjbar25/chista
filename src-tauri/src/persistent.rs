@@ -13,6 +13,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::ipc::Channel;
+#[path = "claude_mcp.rs"]
+mod claude_mcp;
+#[path = "claude_tools.rs"]
+mod claude_tools;
 #[path = "session_http.rs"]
 mod http;
 #[path = "http_request.rs"]
@@ -317,24 +321,27 @@ impl Session {
                 "stream-json",
                 "--verbose",
                 "--include-partial-messages",
-                "--safe-mode",
                 "--tools",
                 "",
-                "--disallowedTools",
-                "*",
-                "--strict-mcp-config",
-                "--mcp-config",
-                "{\"mcpServers\":{}}",
+                "--permission-prompt-tool",
+                "stdio",
+                "--disable-slash-commands",
                 "--setting-sources",
                 "",
-                "--settings",
-                "{\"disableAllHooks\":true}",
                 "--no-session-persistence",
                 "--system-prompt",
                 instructions,
             ]);
+            let config = claude_mcp::config_file(directory.path())?;
+            command
+                .arg("--strict-mcp-config")
+                .arg("--mcp-config")
+                .arg(config);
+            command.env_remove("CLAUDE_CODE_SAFE_MODE");
+            let pipe = Pipe::spawn(&mut command)?;
+            claude_mcp::initialize(&pipe, cancelled, closed)?;
             return Ok(Self {
-                pipe: Pipe::spawn(&mut command)?,
+                pipe,
                 _directory: directory,
                 thread: None,
                 next_id: 10,
@@ -452,11 +459,25 @@ impl Session {
         let mut item = String::new();
         let mut turn_id = String::new();
         let mut seen_calls = std::collections::HashSet::new();
+        let mut claude_pending = HashMap::new();
         loop {
             let event = self.pipe.next(cancelled, closed, started, &mut total)?;
             if self.thread.is_none() {
+                claude_mcp::status(&event, events)?;
                 if event["type"] == "control_request" {
-                    self.pipe.send(json!({"type":"control_response","response":{"subtype":"error","request_id":event["request_id"],"error":"Agent tools are disabled in Chista chat."}}))?;
+                    claude_mcp::control(
+                        &self.pipe,
+                        &event,
+                        events,
+                        approvals,
+                        request_id,
+                        cancelled,
+                        closed,
+                        &mut claude_pending,
+                        &mut seen_calls,
+                    )?;
+                    started = Instant::now();
+                    continue;
                 }
                 if let Some(delta) = stream_delta(&event) {
                     events
@@ -464,6 +485,9 @@ impl Session {
                         .map_err(|_| "Chat closed.")?;
                 }
                 if event["type"] == "result" {
+                    if !claude_pending.is_empty() {
+                        return Err("Claude completed without sanitizing an MCP result.".into());
+                    }
                     if event["is_error"] == true || event["subtype"] != "success" {
                         return Err(claude_failure(&event));
                     }
@@ -577,7 +601,7 @@ mode=MODE
 frames=Path(__file__).with_suffix('.frames')
 def emit(value): print(json.dumps(value),flush=True)
 args=sys.argv[1:]
-assert '--safe-mode' in args if mode=='claude' else '--strict-config' in args
+assert '--safe-mode' not in args if mode=='claude' else '--strict-config' in args
 if mode=='claude':
  assert args[args.index('--input-format')+1]=='stream-json'
  assert '--no-session-persistence' in args
@@ -591,6 +615,11 @@ for line in sys.stdin:
  f=json.loads(line)
  with frames.open('a') as log: log.write(json.dumps(f)+'\n')
  if mode=='claude':
+  if f['type']=='control_request':
+   assert f['request']['subtype']=='initialize'
+   assert 'PostToolUse' in f['request']['hooks']
+   emit({'type':'control_response','response':{'subtype':'success','request_id':f['request_id'],'response':{'hooks_applied':True}}})
+   continue
   assert f['type']=='user'
   count+=1
   first=first or f['message']['content']
@@ -665,7 +694,7 @@ for line in sys.stdin:
                 assert!(frames.contains("-32601"));
             } else {
                 assert!(!frames.contains("FORMAT_ONCE"));
-                assert_eq!(frames.lines().count(), 2);
+                assert_eq!(frames.lines().count(), 3);
             }
         }
     }

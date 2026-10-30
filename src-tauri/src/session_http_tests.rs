@@ -3,7 +3,12 @@ use std::io::Write;
 
 #[test]
 fn denies_http_without_execution_and_returns_only_sanitized_results() {
-    for allowed in [false, true] {
+    for (agent, allowed) in [
+        ("claude", false),
+        ("claude", true),
+        ("codex", false),
+        ("codex", true),
+    ] {
         let directory = tempfile::tempdir().unwrap();
         let recorded = directory.path().join("reply.json");
         let code = r#"import json,sys
@@ -78,7 +83,12 @@ sys.stdin.read()
         });
         let cancelled = AtomicBool::new(false);
         let closed = AtomicBool::new(false);
-        call(&pipe,&json!({"id":"http-call","params":{"tool":"chista_http_request","callId":"call","arguments":{"url":format!("http://{address}/api")}}}),&channel,&approvals,"request",&cancelled,&closed).unwrap();
+        let input = json!({"url":format!("http://{address}/api")});
+        if agent == "claude" {
+            crate::persistent::claude_tools::call(&pipe, &json!({"type":"control_request","request_id":"http-call","request":{"subtype":"mcp_message","server_name":"chista_internal","message":{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"chista_http_request","arguments":input}}}}), &channel, &approvals, "request", &cancelled, &closed).unwrap();
+        } else {
+            call(&pipe, &json!({"id":"http-call","params":{"tool":"chista_http_request","callId":"call","arguments":input}}), &channel, &approvals, "request", &cancelled, &closed).unwrap();
+        }
         let mut total = 0;
         assert_eq!(
             pipe.next(&cancelled, &closed, Instant::now(), &mut total)

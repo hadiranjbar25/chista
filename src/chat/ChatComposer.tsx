@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, X } from 'lucide-react';
 import FullscreenSection from '../components/FullscreenSection';
 import type { AgentChatProps } from './chatTypes';
@@ -6,17 +6,10 @@ import type { ChatController } from './useAgentChat';
 
 type Props = Pick<
   AgentChatProps,
-  | 'attachments'
-  | 'onRemoveAttachment'
-  | 'onFiles'
-  | 'onAddFiles'
-  | 'onAgentChange'
-  | 'mode'
-  | 'hosted'
+  'onRemoveAttachment' | 'onFiles' | 'onAddFiles' | 'onAgentChange' | 'mode' | 'hosted'
 > & { chat: ChatController };
 export default function ChatComposer({
   chat,
-  attachments,
   onRemoveAttachment,
   onFiles,
   onAddFiles,
@@ -31,6 +24,7 @@ export default function ChatComposer({
     jumpToLatest,
     busy,
     composer,
+    composerAttachments: attachments,
     prompt,
     setPrompt,
     setPending,
@@ -39,6 +33,9 @@ export default function ChatComposer({
     stop,
   } = chat;
   const [showAttachments, setShowAttachments] = useState(false);
+  useEffect(() => {
+    if (!attachments?.files.length) setShowAttachments(false);
+  }, [attachments?.files.length]);
   return (
     <form
       className="chat-composer"

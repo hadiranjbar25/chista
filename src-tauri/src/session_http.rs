@@ -29,21 +29,40 @@ pub(super) fn call(
         .as_str()
         .filter(|id| id.len() <= 200)
         .ok_or("Invalid HTTP tool call ID.")?;
+    let (text, success) = perform(
+        event["params"]["arguments"].clone(),
+        call,
+        events,
+        approvals,
+        request_id,
+        cancelled,
+        closed,
+    )?;
+    finish(pipe, event, &text, success)
+}
+
+pub(super) fn perform(
+    input: Value,
+    call: &str,
+    events: &Channel<Value>,
+    approvals: &mcp::Approvals,
+    request_id: &str,
+    cancelled: &AtomicBool,
+    closed: &AtomicBool,
+) -> Result<(String, bool), String> {
     let key = format!("{request_id}:{call}");
-    let input = event["params"]["arguments"].clone();
     if let Err(error) = http_request::validate(&input) {
-        return finish(pipe, event, &error, false);
+        return Ok((error, false));
     }
     let approved = approvals.exchange(events, format!("{key}:approve"),
         json!({"type":"tool_approval","kind":"http","callId":key,"server":"HTTP","tool":"request","arguments":input}),cancelled,closed)?;
     if approved["approved"] != true {
         events.send(json!({"type":"tool_progress","callId":key,"server":"HTTP","tool":"request","state":"denied"})).map_err(|_| "Chat closed.")?;
-        return finish(
-            pipe,
-            event,
-            "The user denied this HTTP request. Do not retry without a new explicit request.",
+        return Ok((
+            "The user denied this HTTP request. Do not retry without a new explicit request."
+                .into(),
             false,
-        );
+        ));
     }
     events.send(json!({"type":"tool_progress","callId":key,"server":"HTTP","tool":"request","state":"running"})).map_err(|_| "Chat closed.")?;
     let result = http_request::execute(&approved["arguments"], cancelled, closed);
@@ -54,14 +73,13 @@ pub(super) fn call(
     };
     let safe = approvals.exchange(events,format!("{key}:result"),
         json!({"type":"tool_result","kind":"http","callId":key,"server":"HTTP","tool":"request","success":success,"result":{"content":[{"type":"text","text":text}]}}),cancelled,closed)?;
-    finish(
-        pipe,
-        event,
+    Ok((
         safe["content"]
             .as_str()
-            .ok_or("Sanitized HTTP result missing.")?,
+            .ok_or("Sanitized HTTP result missing.")?
+            .to_string(),
         success && safe["success"] != false,
-    )
+    ))
 }
 
 fn finish(pipe: &Pipe, event: &Value, text: &str, success: bool) -> Result<bool, String> {
