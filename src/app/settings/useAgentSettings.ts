@@ -32,9 +32,9 @@ export function useAgentSettings(setNotice: (notice: string) => void) {
   }, [codexPath]);
   async function loadModels(agent: CliAgent, refresh = false) {
     const catalog = modelCatalogs[agent];
-    if (catalog.loading || (catalog.loaded && !refresh)) return;
+    if (!refresh && (catalog.loading || catalog.loaded)) return;
     const version = ++catalogVersions.current[agent];
-    setModelCatalogs((all) => ({ ...all, [agent]: { ...all[agent], loading: true, error: '' } }));
+    setModelCatalogs((all) => ({ ...all, [agent]: { ...emptyModelCatalog(), loading: true } }));
     try {
       if (!isTauri()) throw new Error('Desktop required');
       const options = await invoke<ModelChoice[]>('agent_models', {
@@ -59,6 +59,12 @@ export function useAgentSettings(setNotice: (notice: string) => void) {
         }));
     }
   }
+  const activeModelPath = mode === 'claude' ? claudePath : codexPath;
+  useEffect(() => {
+    if (isTauri() && (mode === 'claude' || mode === 'codex')) void loadModels(mode, true);
+    // Only a change of agent/executable should reload the catalog, not the
+    // loading/result state updates produced by the lookup itself.
+  }, [mode, activeModelPath]);
   const [hosted, setHosted] = useState<HostedConfig>({ endpoint: '', model: '', token: '' });
   const [hostedDraft, setHostedDraft] = useState<HostedConfig>({
     endpoint: '',

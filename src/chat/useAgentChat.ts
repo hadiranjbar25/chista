@@ -1,7 +1,7 @@
 import type { ToolHooks } from '../integrations/cliTools';
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { claudeProvider, codexProvider } from '../integrations/claude';
+import { claudeProvider, codexProvider, RetainedTurnError } from '../integrations/claude';
 import {
   contextEvidence,
   updateActivity,
@@ -39,6 +39,9 @@ export function useAgentChat({
   onEvidence,
 }: AgentChatProps) {
   const agentLabel = mode === 'hosted' ? hosted.model : mode === 'codex' ? 'Codex' : 'Claude Code';
+  const inFlight = useRef(false);
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const executablePath = mode === 'codex' ? codexPath : claudePath;
   const repoSignature = JSON.stringify(repositories.map((r) => [r.id, r.name, r.path]));
   const { composerAttachments, consumeAttachments } = useComposerAttachments(attachments);
@@ -53,7 +56,12 @@ export function useAgentChat({
   const [authStatus, setAuthStatus] = useState('');
   const [toolApproval, setToolApproval] = useState<ToolApproval | null>(null);
   const [mcpServers, setMcpServers] = useState<McpStatus[]>([]);
-  useEffect(() => setMcpServers([]), [mode, claudePath, codexPath, model]);
+  useEffect(() => setMcpServers([]), [mode, executablePath]);
+  const [refreshingMcp, setRefreshingMcp] = useState(false);
+  const [openingMcpLogin, setOpeningMcpLogin] = useState(false);
+  const mcpRefreshLock = useRef(false);
+  const mcpGeneration = useRef(0);
+  const mcpLoginPending = useRef<{ mode: string; path: string; server: string } | null>(null);
   const toolDecision = useRef<((approved: boolean) => void) | null>(null);
   function decideTool(approved: boolean) {
     toolDecision.current?.(approved);
@@ -100,27 +108,35 @@ export function useAgentChat({
   ]);
   useEffect(() => {
     if (!active) {
-      abort.current?.abort();
       setPending(null);
       decideTool(false);
     }
   }, [active]);
   useEffect(() => {
+    mcpGeneration.current++;
+    mcpRefreshLock.current = false;
+    mcpLoginPending.current = null;
+    setRefreshingMcp(false);
+    setOpeningMcpLogin(false);
     conversationState.current.reset();
     return () => {
       abort.current?.abort();
       conversationState.current.reset();
     };
-  }, [mode, claudePath, codexPath, model]);
+  }, [mode, executablePath]);
   useEffect(() => {
     // Revoke an in-flight snapshot when selected repos/evidence change, but retain an idle
     // native thread so the next turn can send only the updated evidence.
     abort.current?.abort();
   }, [context, repoSignature]);
   const canSend =
-    !busy && !attachments?.busy && Boolean(prompt.trim() || composerAttachments?.files.length);
+    !busy &&
+    !refreshingMcp &&
+    !openingMcpLogin &&
+    !attachments?.busy &&
+    Boolean(prompt.trim() || composerAttachments?.files.length);
   function sendMessage() {
-    if (!canSend) return;
+    if (!canSend || inFlight.current || mcpRefreshLock.current) return;
     try {
       if (mode === 'hosted') hostedProvider(hosted);
       if (mode === 'claude') claudeProvider(claudePath);
@@ -152,7 +168,8 @@ export function useAgentChat({
     }
   }
   async function execute(snapshot: PendingRequest) {
-    if (busy) return;
+    if (inFlight.current || mcpRefreshLock.current) return;
+    inFlight.current = true;
     setPending(null);
     setBusy(true);
     setNotice('');
@@ -181,10 +198,12 @@ export function useAgentChat({
           }
         },
         approve: (tool) =>
-          new Promise<boolean>((resolve) => {
-            toolDecision.current = resolve;
-            setToolApproval(tool);
-          }),
+          !activeRef.current
+            ? Promise.resolve(false)
+            : new Promise<boolean>((resolve) => {
+                toolDecision.current = resolve;
+                setToolApproval(tool);
+              }),
       };
       const provider =
         snapshot.mode === 'hosted'
@@ -237,7 +256,11 @@ export function useAgentChat({
         clearTimeout(timer);
       }
     } catch (error) {
-      if (snapshot.mode !== 'hosted') conversationState.current.reset();
+      if (submitted && snapshot.mode !== 'hosted') {
+        if (error instanceof RetainedTurnError && snapshot.turn)
+          conversationState.current.commit(snapshot.turn, snapshot.request.messages);
+        else conversationState.current.reset();
+      }
       if (mounted.current && submitted) setMessages(snapshot.request.messages);
       if (snapshot.mode === 'hosted')
         onModelStatus(
@@ -251,6 +274,7 @@ export function useAgentChat({
             : 'Request failed or was cancelled. Check integration status and permissions. No automatic retry was made.',
         );
     } finally {
+      inFlight.current = false;
       if (mounted.current) {
         setActivities((all) => ({
           ...all,
@@ -271,20 +295,74 @@ export function useAgentChat({
 
   function stop() {
     decideTool(false);
+    setAuthStatus('Stopping…');
     abort.current?.abort();
   }
-  async function signInMcp(server: string) {
+  async function refreshMcp(server?: string) {
+    if (mode === 'hosted' || inFlight.current || mcpRefreshLock.current) return;
+    const generation = mcpGeneration.current;
+    mcpRefreshLock.current = true;
+    setRefreshingMcp(true);
     try {
-      const agent = mode === 'claude' ? 'claude' : 'codex';
+      const statuses = await invoke<McpStatus[]>('refresh_agent_mcp', {
+        sessionKey: conversationState.current.sessionKey(),
+        agent: mode,
+        executablePath,
+        ...(server ? { server } : {}),
+      });
+      if (!mounted.current || generation !== mcpGeneration.current) return;
+      setMcpServers(statuses);
+      const pending = mcpLoginPending.current;
+      const target = pending ? statuses.find((item) => item.name === pending.server) : null;
+      if (target && target.authStatus === 'notLoggedIn') {
+        setNotice('Sign-in is still required. Finish native login, then refresh connections.');
+      } else {
+        mcpLoginPending.current = null;
+        setNotice('MCP connections refreshed.');
+      }
+    } catch (error) {
+      if (mounted.current && generation === mcpGeneration.current) setNotice(String(error));
+    } finally {
+      if (generation === mcpGeneration.current) {
+        mcpRefreshLock.current = false;
+        if (mounted.current) setRefreshingMcp(false);
+      }
+    }
+  }
+  useEffect(() => {
+    function returned() {
+      const pending = mcpLoginPending.current;
+      if (
+        active &&
+        !inFlight.current &&
+        pending?.mode === mode &&
+        pending.path === executablePath &&
+        document.visibilityState !== 'hidden'
+      )
+        void refreshMcp(pending.server);
+    }
+    window.addEventListener('focus', returned);
+    document.addEventListener('visibilitychange', returned);
+    return () => {
+      window.removeEventListener('focus', returned);
+      document.removeEventListener('visibilitychange', returned);
+    };
+  }, [active, mode, executablePath, busy]);
+  async function signInMcp(server: string) {
+    if (inFlight.current || mcpRefreshLock.current || openingMcpLogin) return;
+    const generation = mcpGeneration.current;
+    setOpeningMcpLogin(true);
+    try {
+      const message = await invoke<string>(`${mode}_mcp_sign_in`, { executablePath, server });
+      if (!mounted.current || generation !== mcpGeneration.current) return;
+      mcpLoginPending.current = { mode, path: executablePath, server };
       setNotice(
-        await invoke<string>(`${agent}_mcp_sign_in`, {
-          executablePath: agent === 'claude' ? claudePath : codexPath,
-          server,
-        }),
+        `${message} Connections refresh when you return. You can also use Refresh connections.`,
       );
-      conversationState.current.reset();
-    } catch {
-      setNotice('Could not open MCP sign-in. Run your agent’s MCP login in your terminal.');
+    } catch (error) {
+      if (mounted.current && generation === mcpGeneration.current) setNotice(String(error));
+    } finally {
+      if (mounted.current && generation === mcpGeneration.current) setOpeningMcpLogin(false);
     }
   }
   return {
@@ -317,6 +395,9 @@ export function useAgentChat({
     sources,
     stop,
     signInMcp,
+    refreshMcp,
+    refreshingMcp,
+    openingMcpLogin,
   };
 }
 export type ChatController = ReturnType<typeof useAgentChat>;

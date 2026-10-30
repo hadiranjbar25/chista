@@ -7,7 +7,15 @@ export function claudePayload(request: ModelRequest): string {
   return JSON.stringify({ messages: hostedBody('', request).messages }, null, 2);
 }
 
-type ClaudeEvent = { type: 'started' } | { type: 'delta' | 'replace'; text: string } | ToolEvent;
+// The native process acknowledged a completed/interrupted turn and retained
+// its conversation. Reconnect only when that acknowledgement is absent.
+export class RetainedTurnError extends Error {}
+
+type ClaudeEvent =
+  | { type: 'session_retained' }
+  | { type: 'started' }
+  | { type: 'delta' | 'replace'; text: string }
+  | ToolEvent;
 export function claudeProvider(
   executablePath: string,
   turn?: NativeTurn,
@@ -43,12 +51,17 @@ function cliProvider(
       const events = new Channel<ClaudeEvent>();
       let started = false;
       let finished = false;
+      let retained = false;
       let text = '';
       const cancel = () => {
         if (started && !finished) void invoke('cancel_agent_chat', { requestId }).catch(() => {});
       };
       events.onmessage = (event) => {
         if (finished) return;
+        if (event.type === 'session_retained') {
+          retained = true;
+          return;
+        }
         if (
           event.type === 'tool_progress' ||
           event.type === 'tool_approval' ||
@@ -75,8 +88,24 @@ function cliProvider(
           ...(turn ? { agent, ...turn } : { payload: claudePayload(request) }),
           onEvent: events,
         });
+        if (signal.aborted && turn)
+          throw new RetainedTurnError(
+            'Request cancelled. The conversation is ready for your next message.',
+          );
         signal.throwIfAborted();
         return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        let failure: { code?: unknown; message?: unknown } | null = null;
+        try {
+          failure = JSON.parse(message);
+        } catch {
+          /* Older/native transport errors are plain text. */
+        }
+        if (failure?.code === 'session_retained' && typeof failure.message === 'string')
+          throw new RetainedTurnError(failure.message);
+        if (retained) throw new RetainedTurnError(message);
+        throw error;
       } finally {
         finished = true;
         signal.removeEventListener('abort', cancel);

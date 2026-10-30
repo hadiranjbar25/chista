@@ -90,6 +90,59 @@ pub(super) fn initialize(
     }
 }
 
+pub(super) fn current_model(
+    pipe: &Pipe,
+    id: u64,
+    cancelled: &AtomicBool,
+    closed: &AtomicBool,
+) -> Result<String, String> {
+    let request_id = format!("chista-default-model-{id}");
+    pipe.send(json!({"type":"control_request","request_id":request_id,"request":{"subtype":"get_context_usage"}}))?;
+    let started = Instant::now();
+    let mut total = 0;
+    loop {
+        let event = pipe.next(cancelled, closed, started, &mut total)?;
+        if event["type"] == "control_response" && event["response"]["request_id"] == request_id {
+            if event["response"]["subtype"] == "success" {
+                return event["response"]["response"]["model"].as_str().filter(|model| !model.is_empty()).map(str::to_string).ok_or("Claude did not report its current model. Update Claude Code before switching models.".into());
+            }
+            return Err("Could not read Claude’s default model. Update Claude Code before switching models.".into());
+        }
+        if event["type"] == "control_request" && !claude_tools::bootstrap(pipe, &event)? {
+            return Err("Unexpected tool request while reading the current model.".into());
+        }
+    }
+}
+
+pub(super) fn set_model(
+    pipe: &Pipe,
+    model: &str,
+    id: u64,
+    cancelled: &AtomicBool,
+    closed: &AtomicBool,
+) -> Result<(), String> {
+    let request_id = format!("chista-model-{id}");
+    pipe.send(json!({"type":"control_request","request_id":request_id,"request":{"subtype":"set_model","model":if model.is_empty() {Value::Null} else {json!(model)}}}))?;
+    let started = Instant::now();
+    let mut total = 0;
+    loop {
+        let event = pipe.next(cancelled, closed, started, &mut total)?;
+        if event["type"] == "control_response" && event["response"]["request_id"] == request_id {
+            return if event["response"]["subtype"] == "success" {
+                Ok(())
+            } else {
+                Err(
+                    "Claude could not select this model. Check its availability in your account."
+                        .into(),
+                )
+            };
+        }
+        if event["type"] == "control_request" && !claude_tools::bootstrap(pipe, &event)? {
+            return Err("Unexpected tool request while changing models.".into());
+        }
+    }
+}
+
 fn reply(pipe: &Pipe, event: &Value, response: Value) -> Result<(), String> {
     pipe.send(json!({"type":"control_response","response":{"subtype":"success","request_id":event["request_id"],"response":response}}))
 }

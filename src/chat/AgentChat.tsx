@@ -16,7 +16,9 @@ export default function AgentChat(props: AgentChatProps) {
         mode={props.mode}
         mcpServers={chat.mcpServers}
         onFiles={props.onFiles}
-        busy={chat.busy}
+        busy={chat.busy || chat.refreshingMcp || chat.openingMcpLogin}
+        refreshingMcp={chat.refreshingMcp}
+        refreshMcp={chat.refreshMcp}
         signInMcp={chat.signInMcp}
       />
       <ChatMessages chat={chat} />

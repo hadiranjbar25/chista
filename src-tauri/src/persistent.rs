@@ -21,17 +21,20 @@ mod claude_tools;
 mod http;
 #[path = "http_request.rs"]
 mod http_request;
+#[path = "session_interrupt.rs"]
+mod interrupt;
 #[path = "session_mcp.rs"]
 pub mod mcp;
 #[path = "agent_models.rs"]
 pub mod models;
+#[path = "session_refresh.rs"]
+pub mod refresh;
 
 #[derive(Default, Clone)]
 pub struct Sessions(Arc<Mutex<HashMap<String, Arc<Entry>>>>);
 struct Entry {
     agent: String,
     binary: PathBuf,
-    model: String,
     closed: AtomicBool,
     session: Mutex<Option<Session>>,
 }
@@ -90,11 +93,7 @@ pub async fn agent_session_chat(
     let entry = {
         let mut entries = sessions.0.lock().unwrap();
         if let Some(entry) = entries.get(&session_key) {
-            if entry.agent != agent
-                || entry.binary != binary
-                || entry.model != model
-                || system_prompt.is_some()
-            {
+            if entry.agent != agent || entry.binary != binary || system_prompt.is_some() {
                 return Err(
                     "Session configuration changed. Send again to start a fresh session.".into(),
                 );
@@ -114,7 +113,6 @@ pub async fn agent_session_chat(
             let entry = Arc::new(Entry {
                 agent: agent.clone(),
                 binary: binary.clone(),
-                model: model.clone(),
                 closed: AtomicBool::new(false),
                 session: Mutex::new(None),
             });
@@ -143,7 +141,10 @@ pub async fn agent_session_chat(
                 return Err("This agent session is busy.".into());
             }
         };
-        let result = (|| {
+        if let Some(native) = session.as_mut() {
+            native.retain_after_error = false;
+        }
+        let mut result = (|| {
             on_event
                 .send(json!({"type":"started"}))
                 .map_err(|_| "Chat closed.")?;
@@ -154,30 +155,63 @@ pub async fn agent_session_chat(
                 let instructions = system_prompt
                     .as_deref()
                     .ok_or("Agent session is not ready.")?;
-                *session = Some(Session::start_with_model(
+                *session = Some(Session::start(
                     binary,
                     &agent,
                     instructions,
-                    &model,
                     &cancelled,
                     &entry.closed,
                 )?);
             }
-            session.as_mut().unwrap().turn_with_tools(
+            session.as_mut().unwrap().turn_with_model(
                 &payload,
                 &on_event,
                 &cancelled,
                 &entry.closed,
                 &approvals,
                 &request_id,
+                &model,
             )
         })();
-        if result.is_err() {
+        if result.is_err()
+            && cancelled.load(Ordering::SeqCst)
+            && !entry.closed.load(Ordering::SeqCst)
+        {
+            if let Some(native) = session
+                .as_mut()
+                .filter(|native| native.active_request.is_some() && !native.pending_tool)
+            {
+                result = native.interrupt(&entry.closed);
+            }
+        }
+        if result.is_ok() && cancelled.load(Ordering::SeqCst) {
+            result =
+                Err("Request cancelled. The conversation is ready for your next message.".into());
+        }
+        // Keep only a live process with a fully consumed turn boundary. Tool
+        // cancellation may leave connector RPCs pending, so it reconnects.
+        let retained = result.is_err()
+            && !entry.closed.load(Ordering::SeqCst)
+            && session.as_mut().is_some_and(|native| {
+                native.retain_after_error
+                    && native
+                        .pipe
+                        .child
+                        .try_wait()
+                        .is_ok_and(|status| status.is_none())
+            });
+        if retained {
+            // Carry retention in the final IPC error, not only an asynchronous
+            // event that could arrive after the promise has already rejected.
+            result = result.map_err(|message| {
+                json!({"code":"session_retained","message":message}).to_string()
+            });
+        } else if result.is_err() {
             *session = None;
         }
         drop(session);
         processes.0.lock().unwrap().remove(&request_id);
-        if result.is_err() {
+        if result.is_err() && !retained {
             sessions.close(&session_key);
         }
         result
@@ -254,11 +288,21 @@ impl Pipe {
         started: Instant,
         total: &mut usize,
     ) -> Result<Value, String> {
+        self.next_with_timeout(cancelled, closed, started, total, Duration::from_secs(120))
+    }
+    fn next_with_timeout(
+        &self,
+        cancelled: &AtomicBool,
+        closed: &AtomicBool,
+        started: Instant,
+        total: &mut usize,
+        timeout: Duration,
+    ) -> Result<Value, String> {
         loop {
             if cancelled.load(Ordering::SeqCst) || closed.load(Ordering::SeqCst) {
                 return Err("Request cancelled.".into());
             }
-            if started.elapsed() > Duration::from_secs(120) {
+            if started.elapsed() > timeout {
                 return Err("Agent timed out.".into());
             }
             match self
@@ -312,23 +356,18 @@ struct Session {
     next_id: u64,
     mcp: Option<mcp::Connector>,
     _claude_settings: Option<tempfile::NamedTempFile>,
+    model: String,
+    default_model: Option<String>,
+    active_request: Option<u64>,
+    active_turn: Option<String>,
+    retain_after_error: bool,
+    pending_tool: bool,
 }
 impl Session {
-    #[cfg(test)]
     fn start(
         binary: PathBuf,
         agent: &str,
         instructions: &str,
-        cancelled: &AtomicBool,
-        closed: &AtomicBool,
-    ) -> Result<Self, String> {
-        Self::start_with_model(binary, agent, instructions, "", cancelled, closed)
-    }
-    fn start_with_model(
-        binary: PathBuf,
-        agent: &str,
-        instructions: &str,
-        model: &str,
         cancelled: &AtomicBool,
         closed: &AtomicBool,
     ) -> Result<Self, String> {
@@ -337,9 +376,6 @@ impl Session {
         let mut command = Command::new(binary);
         command.current_dir(directory.path());
         if agent == "claude" {
-            if !model.is_empty() {
-                command.arg(format!("--model={model}"));
-            }
             let settings = crate::claude_settings::user_settings()?;
             command.arg("--settings").arg(settings.path());
             command.args([
@@ -376,6 +412,12 @@ impl Session {
                 next_id: 10,
                 mcp: None,
                 _claude_settings: Some(settings),
+                model: String::new(),
+                default_model: None,
+                active_request: None,
+                active_turn: None,
+                retain_after_error: false,
+                pending_tool: false,
             });
         }
         let file = directory.path().join("instructions.md");
@@ -422,14 +464,17 @@ impl Session {
                     let config = mcp::analysis_config(&event["result"]["config"])?;
                     let mut tools = mcp.as_ref().map(|c| c.definitions()).unwrap_or_default();
                     tools.push(http::definition());
-                    pipe.send(json!({"id":3,"method":"thread/start","params":{"cwd":directory.path(),"ephemeral":true,"approvalPolicy":"never","permissions":"chista","environments":[],"config":config,"baseInstructions":instructions,"dynamicTools":tools,"model":if model.is_empty() {Value::Null} else {json!(model)}}}))?;
+                    pipe.send(json!({"id":3,"method":"thread/start","params":{"cwd":directory.path(),"ephemeral":true,"approvalPolicy":"never","permissions":"chista","environments":[],"config":config,"baseInstructions":instructions,"dynamicTools":tools,"model":Value::Null}}))?;
                 }
                 Some(3) => {
-                    break event["result"]["thread"]["id"]
-                        .as_str()
-                        .filter(|s| !s.is_empty())
-                        .ok_or("Codex returned no thread ID.")?
-                        .to_string()
+                    break (
+                        event["result"]["thread"]["id"]
+                            .as_str()
+                            .filter(|s| !s.is_empty())
+                            .ok_or("Codex returned no thread ID.")?
+                            .to_string(),
+                        event["result"]["model"].as_str().map(str::to_string),
+                    )
                 }
                 _ => {}
             }
@@ -437,10 +482,16 @@ impl Session {
         Ok(Self {
             pipe,
             _directory: directory,
-            thread: Some(thread),
+            thread: Some(thread.0),
             next_id: 10,
             mcp,
             _claude_settings: None,
+            model: String::new(),
+            default_model: thread.1,
+            active_request: None,
+            active_turn: None,
+            retain_after_error: false,
+            pending_tool: false,
         })
     }
     #[cfg(test)]
@@ -460,6 +511,7 @@ impl Session {
             "test",
         )
     }
+    #[cfg(test)]
     fn turn_with_tools(
         &mut self,
         payload: &str,
@@ -469,6 +521,22 @@ impl Session {
         approvals: &mcp::Approvals,
         request_id: &str,
     ) -> Result<String, String> {
+        self.turn_with_model(
+            payload, events, cancelled, closed, approvals, request_id, "",
+        )
+    }
+    fn turn_with_model(
+        &mut self,
+        payload: &str,
+        events: &Channel<Value>,
+        cancelled: &AtomicBool,
+        closed: &AtomicBool,
+        approvals: &mcp::Approvals,
+        request_id: &str,
+        model: &str,
+    ) -> Result<String, String> {
+        self.retain_after_error = false;
+        self.pending_tool = false;
         if cancelled.load(Ordering::SeqCst) || closed.load(Ordering::SeqCst) {
             return Err("Request cancelled.".into());
         }
@@ -477,10 +545,29 @@ impl Session {
                 .send(json!({"type":"mcp_status","servers":mcp.statuses}))
                 .map_err(|_| "Chat closed.")?;
         }
+        if self.thread.is_none() && self.model != model {
+            if self.default_model.is_none() {
+                self.default_model = Some(claude_mcp::current_model(
+                    &self.pipe,
+                    self.next_id,
+                    cancelled,
+                    closed,
+                )?);
+            }
+            let selected = if model.is_empty() {
+                self.default_model.as_deref().unwrap()
+            } else {
+                model
+            };
+            claude_mcp::set_model(&self.pipe, selected, self.next_id, cancelled, closed)?;
+        }
+        self.model = model.to_string();
         let id = self.next_id;
         self.next_id += 1;
+        self.active_request = Some(id);
+        self.active_turn = None;
         if let Some(thread) = &self.thread {
-            self.pipe.send(json!({"id":id,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":payload}],"environments":[]}}))?;
+            self.pipe.send(json!({"id":id,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":payload}],"environments":[],"model":if model.is_empty() {self.default_model.as_deref()} else {Some(model)}}}))?;
         } else {
             self.pipe.send(json!({"type":"user","message":{"role":"user","content":payload},"parent_tool_use_id":null,"session_id":""}))?;
         }
@@ -496,6 +583,7 @@ impl Session {
             if self.thread.is_none() {
                 claude_mcp::status(&event, events)?;
                 if event["type"] == "control_request" {
+                    self.pending_tool = true;
                     claude_mcp::control(
                         &self.pipe,
                         &event,
@@ -507,6 +595,7 @@ impl Session {
                         &mut claude_pending,
                         &mut seen_calls,
                     )?;
+                    self.pending_tool = false;
                     started = Instant::now();
                     continue;
                 }
@@ -519,6 +608,8 @@ impl Session {
                     if !claude_pending.is_empty() {
                         return Err("Claude completed without sanitizing an MCP result.".into());
                     }
+                    self.active_request = None;
+                    self.retain_after_error = true;
                     if event["is_error"] == true || event["subtype"] != "success" {
                         return Err(claude_failure(&event));
                     }
@@ -535,12 +626,14 @@ impl Session {
                 && event["params"]["turnId"].as_str() == Some(&turn_id)
                 && !turn_id.is_empty()
             {
+                self.pending_tool = true;
                 if !seen_calls.insert(event["params"]["callId"].to_string()) {
                     return Err("Duplicate MCP tool call rejected.".into());
                 }
                 if http::call(
                     &self.pipe, &event, events, approvals, request_id, cancelled, closed,
                 )? {
+                    self.pending_tool = false;
                     started = Instant::now();
                     continue;
                 }
@@ -548,10 +641,12 @@ impl Session {
                     if mcp.call(
                         &self.pipe, &event, events, approvals, request_id, cancelled, closed,
                     )? {
+                        self.pending_tool = false;
                         started = Instant::now();
                         continue;
                     }
                 }
+                self.pending_tool = false;
             }
             if self.pipe.reject_tool(&event)? {
                 continue;
@@ -567,6 +662,7 @@ impl Session {
                     .as_str()
                     .ok_or("Codex returned no turn ID.")?
                     .to_string();
+                self.active_turn = Some(turn_id.clone());
                 continue;
             }
             let params = &event["params"];
@@ -604,6 +700,9 @@ impl Session {
                     }
                 }
                 Some("turn/completed") if params["turn"]["id"].as_str() == Some(&turn_id) => {
+                    self.active_request = None;
+                    self.active_turn = None;
+                    self.retain_after_error = true;
                     if params["turn"]["status"] != "completed" {
                         return Err("Codex turn failed or was interrupted. Check its native account status.".into());
                     }
@@ -648,6 +747,12 @@ for line in sys.stdin:
  with frames.open('a') as log: log.write(json.dumps(f)+'\n')
  if mode=='claude':
   if f['type']=='control_request':
+   if f['request']['subtype']=='get_context_usage':
+    emit({'type':'control_response','response':{'subtype':'success','request_id':f['request_id'],'response':{'model':'fixture-default'}}})
+    continue
+   if f['request']['subtype']=='set_model':
+    emit({'type':'control_response','response':{'subtype':'success','request_id':f['request_id'],'response':{}}})
+    continue
    assert f['request']['subtype']=='initialize'
    assert 'PostToolUse' in f['request']['hooks']
    emit({'type':'control_response','response':{'subtype':'success','request_id':f['request_id'],'response':{'hooks_applied':True}}})
@@ -665,7 +770,7 @@ for line in sys.stdin:
   assert f['params']['ephemeral'] and f['params']['baseInstructions']=='FORMAT_ONCE'
   assert f['params']['config']['mcp_servers']['inherited']['enabled']==False
   assert any(t['name']=='chista_http_request' for t in f['params']['dynamicTools'])
-  emit({'id':f['id'],'result':{'thread':{'id':'thread'}}})
+  emit({'id':f['id'],'result':{'thread':{'id':'thread'},'model':'fixture-default'}})
  elif f.get('method')=='turn/start':
   count+=1
   assert 'baseInstructions' not in f['params']
@@ -687,43 +792,82 @@ for line in sys.stdin:
         (dir, path)
     }
     #[test]
-    fn selected_model_reaches_both_native_backends() {
+    fn changes_models_and_restores_default_without_restarting_or_replaying() {
         for agent in ["claude", "codex"] {
             let (_dir, binary) = fixture(agent);
             let cancelled = AtomicBool::new(false);
             let closed = AtomicBool::new(false);
-            let mut session = Session::start_with_model(
-                binary.clone(),
-                agent,
-                "FORMAT_ONCE",
-                "fixture-model",
-                &cancelled,
-                &closed,
-            )
-            .unwrap();
-            assert_eq!(
-                session
-                    .turn("first", &Channel::new(|_| Ok(())), &cancelled, &closed)
-                    .unwrap(),
-                "1:first"
-            );
+            let mut session =
+                Session::start(binary.clone(), agent, "FORMAT_ONCE", &cancelled, &closed).unwrap();
+            for (index, model) in ["fixture-one", "fixture-two", ""].iter().enumerate() {
+                assert_eq!(
+                    session
+                        .turn_with_model(
+                            if index == 0 { "first" } else { "next" },
+                            &Channel::new(|_| Ok(())),
+                            &cancelled,
+                            &closed,
+                            &mcp::Approvals::default(),
+                            "test",
+                            model
+                        )
+                        .unwrap(),
+                    format!("{}:first", index + 1)
+                );
+            }
+            let frames: Vec<Value> = std::fs::read_to_string(binary.with_extension("frames"))
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
             if agent == "claude" {
-                let args: Value = serde_json::from_str(
-                    &std::fs::read_to_string(binary.with_extension("args")).unwrap(),
-                )
-                .unwrap();
-                assert!(args
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("--model=fixture-model")));
+                let models: Vec<_> = frames
+                    .iter()
+                    .filter(|frame| frame["request"]["subtype"] == "set_model")
+                    .map(|frame| frame["request"]["model"].clone())
+                    .collect();
+                assert_eq!(
+                    models,
+                    vec![
+                        json!("fixture-one"),
+                        json!("fixture-two"),
+                        json!("fixture-default")
+                    ]
+                );
+                assert_eq!(
+                    frames
+                        .iter()
+                        .filter(|frame| frame["request"]["subtype"] == "initialize")
+                        .count(),
+                    1
+                );
+                let prompts: Vec<_> = frames
+                    .iter()
+                    .filter(|frame| frame["type"] == "user")
+                    .map(|frame| frame["message"]["content"].clone())
+                    .collect();
+                assert_eq!(prompts, vec![json!("first"), json!("next"), json!("next")]);
             } else {
-                let frames = std::fs::read_to_string(binary.with_extension("frames")).unwrap();
-                let frame: Value = frames
-                    .lines()
-                    .map(|line| serde_json::from_str::<Value>(line).unwrap())
-                    .find(|frame| frame["method"] == "thread/start")
-                    .unwrap();
-                assert_eq!(frame["params"]["model"], "fixture-model");
+                assert_eq!(
+                    frames
+                        .iter()
+                        .filter(|frame| frame["method"] == "thread/start")
+                        .count(),
+                    1
+                );
+                let models: Vec<_> = frames
+                    .iter()
+                    .filter(|frame| frame["method"] == "turn/start")
+                    .map(|frame| frame["params"]["model"].clone())
+                    .collect();
+                assert_eq!(
+                    models,
+                    vec![
+                        json!("fixture-one"),
+                        json!("fixture-two"),
+                        json!("fixture-default")
+                    ]
+                );
             }
         }
     }
@@ -801,7 +945,6 @@ for line in sys.stdin:
             Arc::new(Entry {
                 agent: "claude".into(),
                 binary,
-                model: String::new(),
                 closed: AtomicBool::new(false),
                 session: Mutex::new(Some(first)),
             }),
@@ -850,7 +993,6 @@ mod shutdown_tests {
         let entry = Arc::new(Entry {
             agent: "claude".into(),
             binary: PathBuf::new(),
-            model: String::new(),
             closed: AtomicBool::new(false),
             session: Mutex::new(None),
         });

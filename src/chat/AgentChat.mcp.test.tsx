@@ -269,5 +269,5 @@ it('keeps Claude MCP sign-in in the top connections list', async () => {
     executablePath: '',
     server: 'needs-auth',
   });
-  expect(native.close).toHaveBeenCalled();
+  expect(native.close).not.toHaveBeenCalled();
 });

@@ -8,6 +8,8 @@ type StatusProps = {
   mcpServers: McpStatus[];
   onFiles: () => void;
   busy: boolean;
+  refreshingMcp: boolean;
+  refreshMcp: () => Promise<void>;
   signInMcp: (server: string) => Promise<void>;
 };
 export function ChatStatus({
@@ -18,6 +20,8 @@ export function ChatStatus({
   onFiles,
   busy,
   signInMcp,
+  refreshingMcp,
+  refreshMcp,
 }: StatusProps) {
   return (
     <div className="chat-status">
@@ -39,6 +43,11 @@ export function ChatStatus({
             }{' '}
             available
           </summary>
+          <div className="mcp-connection-toolbar">
+            <button type="button" disabled={busy} onClick={() => void refreshMcp()}>
+              {refreshingMcp ? 'Refreshing connections…' : 'Refresh connections'}
+            </button>
+          </div>
           <ul>
             {mcpServers.map((server) => (
               <li key={server.name}>

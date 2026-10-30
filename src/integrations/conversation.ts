@@ -33,7 +33,7 @@ export class CliConversation {
       agent === 'codex'
         ? messages[0].content.replace(NO_TOOLS_INSTRUCTION, CODEX_TOOLS_INSTRUCTION)
         : messages[0].content.replace(NO_TOOLS_INSTRUCTION, CLAUDE_TOOLS_INSTRUCTION);
-    const key = JSON.stringify([agent, executablePath, systemPrompt, model]);
+    const key = JSON.stringify([agent, executablePath, systemPrompt]);
     // Redaction discoveries may change earlier UI text. They do not mean that
     // the native thread disappeared or that its whole history needs replaying.
     if (
@@ -85,6 +85,9 @@ export class CliConversation {
       this.repositoryNames = snapshot.repositoryNames;
       this.preparedSnapshots.delete(turn);
     }
+  }
+  sessionKey(): string | null {
+    return this.token || null;
   }
   reset() {
     const token = this.token;

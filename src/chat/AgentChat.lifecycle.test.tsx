@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import { native, chatProps as props } from './testing/nativeChatHarness';
 import AgentChat from './AgentChat';
+import { useAgentChat } from './useAgentChat';
 
 it.each(['claude', 'codex'])('%s requires approval and renders generated OpenUI', async (agent) => {
   let finish!: (text: string) => void;
@@ -48,28 +49,60 @@ it.each(['claude', 'codex'])('%s requires approval and renders generated OpenUI'
   ).toBe('Inspect retries');
 });
 
-it('cancels a native request when its session becomes inactive', async () => {
-  let reject!: (error: Error) => void;
-  native.invoke.mockImplementation((command, args) => {
-    if (command === 'cancel_agent_chat') {
-      reject(new Error('Request cancelled'));
-      return Promise.resolve();
-    }
-    args.onEvent.onmessage({ type: 'started' });
-    return new Promise((_resolve, fail) => {
-      reject = fail;
+it.each(['claude', 'codex'])(
+  'keeps %s running across view navigation without replaying its prompt',
+  async (mode) => {
+    let finish!: (reply: string) => void;
+    let emit!: (event: unknown) => void;
+    native.invoke.mockImplementation((command, args) => {
+      if (command === 'respond_agent_tool') return Promise.resolve();
+      emit = args.onEvent.onmessage;
+      args.onEvent.onmessage({ type: 'started' });
+      return new Promise<string>((resolve) => {
+        finish = resolve;
+      });
     });
-  });
-  const user = userEvent.setup();
-  const view = render(<AgentChat {...props} active />);
-  await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Debug this{Enter}');
-
-  await act(async () => view.rerender(<AgentChat {...props} active={false} />));
-  expect(native.invoke).toHaveBeenCalledWith(
-    'cancel_agent_chat',
-    expect.objectContaining({ requestId: expect.any(String) }),
-  );
-});
+    const user = userEvent.setup();
+    const view = render(<AgentChat {...props} mode={mode} active />);
+    await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Debug this{Enter}');
+    const first = native.invoke.mock.calls[0][1];
+    view.rerender(<AgentChat {...props} mode={mode} active={false} />);
+    expect(native.invoke).toHaveBeenCalledTimes(1);
+    expect(native.close).not.toHaveBeenCalled();
+    await act(async () =>
+      emit({
+        type: 'tool_approval',
+        id: 'hidden-tool',
+        server: 'fixture',
+        tool: 'lookup',
+        arguments: {},
+      }),
+    );
+    await waitFor(() =>
+      expect(native.invoke).toHaveBeenCalledWith(
+        'respond_agent_tool',
+        expect.objectContaining({
+          id: 'hidden-tool',
+          response: expect.objectContaining({ approved: false }),
+        }),
+      ),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await act(async () => finish('{"text":"Finished while hidden","blocks":[]}'));
+    view.rerender(<AgentChat {...props} mode={mode} active />);
+    await screen.findByText('Finished while hidden');
+    native.invoke.mockResolvedValue('{"text":"Next answer","blocks":[]}');
+    await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Follow up{Enter}');
+    const next = native.invoke.mock.calls.filter(
+      ([command]) => command === 'agent_session_chat',
+    )[1][1];
+    expect(next.sessionKey).toBe(first.sessionKey);
+    expect(next.systemPrompt).toBeNull();
+    expect(JSON.parse(next.payload)).toEqual({
+      messages: [{ role: 'user', content: 'Follow up' }],
+    });
+  },
+);
 
 it('cancels active work and releases the native conversation when the session is removed', async () => {
   let reject!: (reason: Error) => void;
@@ -225,3 +258,24 @@ it.each(['claude', 'codex'])(
     expect(next.payload).not.toContain('Reviewed evidence: 2 timeouts');
   },
 );
+
+it('transmits a prompt once when Send is triggered twice before React rerenders', async () => {
+  let finish!: (reply: string) => void;
+  native.invoke.mockImplementation((_command, args) => {
+    args.onEvent.onmessage({ type: 'started' });
+    return new Promise<string>((resolve) => {
+      finish = resolve;
+    });
+  });
+  const { result } = renderHook(() => useAgentChat(props));
+  act(() => result.current.setPrompt('One question'));
+  const send = result.current.sendMessage;
+  act(() => {
+    send();
+    send();
+  });
+  await waitFor(() => expect(native.invoke).toHaveBeenCalledTimes(1));
+  expect(result.current.messages).toEqual([{ role: 'user', content: 'One question' }]);
+  await act(async () => finish('{"text":"Answer","blocks":[]}'));
+  expect(result.current.busy).toBe(false);
+});

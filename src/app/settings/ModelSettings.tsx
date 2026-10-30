@@ -54,6 +54,7 @@ export default function ModelSettings({ settings }: { settings: AgentSettings })
         {(mode === 'claude' || mode === 'codex') && (
           <ModelPicker
             key={mode}
+            agent={mode}
             value={mode === 'claude' ? claudeModel : codexModel}
             {...modelCatalogs[mode]}
             onChange={mode === 'claude' ? setClaudeModel : setCodexModel}

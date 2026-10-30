@@ -68,6 +68,7 @@ it('imports and masks evidence, investigates access, renders cited UI, and sends
     };
   }
   native.invoke.mockImplementation(async (command, args) => {
+    if (command === 'agent_models') return [];
     if (command.endsWith('_auth_status')) return true;
     if (command === 'close_agent_session') return;
     if (command === 'respond_agent_tool') {

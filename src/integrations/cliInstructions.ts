@@ -17,7 +17,7 @@ const SHARED_TOOLS_INSTRUCTION = [
 
 export const CODEX_TOOLS_INSTRUCTION =
   SHARED_TOOLS_INSTRUCTION +
-  ' When asked to connect to an MCP server, inspect chista_mcp_catalog if available.';
+  ' When asked to connect to an MCP server, inspect chista_mcp_catalog if available. Use chista_mcp_call with the exact server and tool names for catalog tools that become available after sign-in or refresh.';
 
 export const CLAUDE_TOOLS_INSTRUCTION =
   SHARED_TOOLS_INSTRUCTION +

@@ -172,7 +172,7 @@ it('sends repository names once and updates selection within the same native thr
 });
 
 it.each(['claude', 'codex'])(
-  'reconnects %s with its history when the selected model changes',
+  'keeps %s in the same thread when the model changes or returns to default',
   (agent) => {
     const session = new CliConversation();
     const first = session.prepare(
@@ -192,10 +192,13 @@ it.each(['claude', 'codex'])(
     expect(same.sessionKey).toBe(first.sessionKey);
     expect(same.systemPrompt).toBeNull();
     const changed = session.prepare(agent, '', { messages, context: null }, 'model-two');
-    expect(changed.sessionKey).not.toBe(first.sessionKey);
-    expect(changed.systemPrompt).not.toBeNull();
+    expect(changed.sessionKey).toBe(first.sessionKey);
+    expect(changed.systemPrompt).toBeNull();
     expect(changed.model).toBe('model-two');
-    expect(JSON.parse(changed.payload).messages).toEqual(messages);
+    expect(JSON.parse(changed.payload).messages).toEqual([{ role: 'user', content: 'Next' }]);
+    const restored = session.prepare(agent, '', { messages, context: null });
+    expect(restored.sessionKey).toBe(first.sessionKey);
+    expect(restored.systemPrompt).toBeNull();
     expect(JSON.parse(nativeTurnPreview(changed)).model).toBe('model-two');
   },
 );

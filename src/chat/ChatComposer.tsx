@@ -153,17 +153,21 @@ export default function ChatComposer({
               )}
             </select>
           )}
-          {mode !== 'hosted' && onModelChange && onLoadModels && modelCatalog && (
-            <ModelPicker
-              key={mode}
-              compact
-              value={model}
-              {...modelCatalog}
-              onChange={onModelChange}
-              onLoad={onLoadModels}
-              disabled={busy}
-            />
-          )}
+          {(mode === 'claude' || mode === 'codex') &&
+            onModelChange &&
+            onLoadModels &&
+            modelCatalog && (
+              <ModelPicker
+                key={mode}
+                agent={mode}
+                compact
+                value={model}
+                {...modelCatalog}
+                onChange={onModelChange}
+                onLoad={onLoadModels}
+                disabled={busy}
+              />
+            )}
           <button type="button" disabled={busy || attachments?.busy} onClick={onAddFiles}>
             + Add files
           </button>

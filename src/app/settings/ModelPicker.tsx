@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { ModelChoice } from '../../integrations/models';
+import type { CliAgent, ModelChoice } from '../../integrations/models';
 import { validModelId } from '../../integrations/models';
 
 type Props = {
+  agent: CliAgent;
   value: string;
   options: ModelChoice[];
   loading: boolean;
@@ -13,6 +14,7 @@ type Props = {
   compact?: boolean;
 };
 export default function ModelPicker({
+  agent,
   value,
   options,
   loading,
@@ -22,6 +24,7 @@ export default function ModelPicker({
   disabled,
   compact,
 }: Props) {
+  const agentLabel = agent === 'claude' ? 'Claude' : 'Codex';
   const [custom, setCustom] = useState(false);
   const [draft, setDraft] = useState(value);
   const [validation, setValidation] = useState('');
@@ -42,9 +45,8 @@ export default function ModelPicker({
           {!compact && 'Model'}
           <select
             aria-label={compact ? 'Chat model' : 'Model'}
-            value={custom ? '__custom__' : value}
-            disabled={disabled}
-            onFocus={() => onLoad()}
+            value={loading ? '' : custom ? '__custom__' : value}
+            disabled={disabled || loading}
             onChange={(event) => {
               const selected = event.target.value;
               setValidation('');
@@ -57,9 +59,11 @@ export default function ModelPicker({
               }
             }}
           >
-            <option value="">CLI default model</option>
+            <option value="">
+              {loading ? `Loading ${agentLabel} models…` : `${agentLabel} CLI default model`}
+            </option>
             {value && !options.some((option) => option.id === value) && (
-              <option value={value}>{value}</option>
+              <option value={value}>{value} (custom)</option>
             )}
             {options.map((option) => (
               <option key={option.id} value={option.id}>
@@ -77,7 +81,7 @@ export default function ModelPicker({
       </div>
       {compact && loading && (
         <span className="muted" role="status">
-          Loading models…
+          Loading {agentLabel} models…
         </span>
       )}
       {custom && (

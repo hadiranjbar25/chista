@@ -68,6 +68,8 @@ pub(super) struct Connector {
     thread: String,
     tools: HashMap<String, Tool>,
     pub statuses: Vec<Value>,
+    allowed_servers: Vec<String>,
+    live_tools: std::collections::HashSet<(String, String)>,
 }
 
 pub fn safe_servers(config: &Value) -> Result<(Value, Vec<String>), String> {
@@ -224,11 +226,69 @@ impl Connector {
                 return Err("MCP inventory has too many pages.".into());
             }
         }
+        let live_tools = tools
+            .values()
+            .map(|tool| (tool.server.clone(), tool.name.clone()))
+            .collect();
         Ok(Some(Self {
+            allowed_servers: names,
+            live_tools,
             thread,
             tools,
             statuses,
         }))
+    }
+    pub(super) fn refresh(
+        &mut self,
+        pipe: &Pipe,
+        cancelled: &AtomicBool,
+        closed: &AtomicBool,
+    ) -> Result<Vec<Value>, String> {
+        rpc(
+            pipe,
+            70,
+            "config/mcpServer/reload",
+            Value::Null,
+            cancelled,
+            closed,
+        )?;
+        let mut cursor = Value::Null;
+        let mut statuses = Vec::new();
+        let mut live_tools = std::collections::HashSet::new();
+        for id in 71..81 {
+            let catalog = rpc(
+                pipe,
+                id,
+                "mcpServerStatus/list",
+                json!({"threadId":self.thread,"limit":100,"detail":"toolsAndAuthOnly","cursor":cursor}),
+                cancelled,
+                closed,
+            )?;
+            for server in catalog["data"]
+                .as_array()
+                .ok_or("MCP inventory unavailable.")?
+            {
+                let Some(name) = server["name"]
+                    .as_str()
+                    .filter(|name| self.allowed_servers.iter().any(|allowed| allowed == name))
+                else {
+                    continue;
+                };
+                statuses.push(json!({"name":name,"authStatus":if server["runtimeStatus"]=="authenticationRequired" {json!("notLoggedIn")}else{server["authStatus"].clone()},"available":server["tools"].as_object().is_some_and(|tools| !tools.is_empty()),"failed":!server["toolsError"].is_null()}));
+                if let Some(tools) = server["tools"].as_object() {
+                    for tool in tools.keys() {
+                        live_tools.insert((name.to_string(), tool.clone()));
+                    }
+                }
+            }
+            cursor = catalog["nextCursor"].clone();
+            if cursor.is_null() {
+                self.statuses = statuses;
+                self.live_tools = live_tools;
+                return Ok(self.statuses.clone());
+            }
+        }
+        Err("MCP inventory has too many pages.".into())
     }
     pub(super) fn definitions(&self) -> Vec<Value> {
         // A generic object allows arguments to be reviewed and sanitized before
@@ -237,6 +297,7 @@ impl Connector {
             "type":"function","name":alias,"description":format!("Call MCP server {}, tool {}. Only use after consulting chista_mcp_catalog for its input schema. Chista requires approval for each call.",tool.server,tool.name),
             "inputSchema":{"type":"object","properties":{"arguments":{"type":"object","additionalProperties":true}},"required":["arguments"],"additionalProperties":false}
         })).collect();
+        tools.push(json!({"type":"function","name":"chista_mcp_call","description":"Call a configured MCP tool by its exact server and tool names from chista_mcp_catalog. Use for tools that become available after sign-in or refresh. Chista requires approval and sanitizes results.","inputSchema":{"type":"object","properties":{"server":{"type":"string"},"tool":{"type":"string"},"arguments":{"type":"object","additionalProperties":true}},"required":["server","tool","arguments"],"additionalProperties":false}}));
         tools.push(json!({"type":"function","name":"chista_mcp_catalog","description":"Inspect configured MCP server names, availability and tool input schemas. Use this when asked to connect to an MCP server.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}));
         tools
     }
@@ -251,7 +312,10 @@ impl Connector {
         closed: &AtomicBool,
     ) -> Result<bool, String> {
         let alias = event["params"]["tool"].as_str().unwrap_or("");
-        if alias != "chista_mcp_catalog" && !self.tools.contains_key(alias) {
+        if alias != "chista_mcp_catalog"
+            && alias != "chista_mcp_call"
+            && !self.tools.contains_key(alias)
+        {
             return Ok(false);
         }
         let call = event["params"]["callId"]
@@ -261,7 +325,24 @@ impl Connector {
             return Err("Invalid tool call ID.".into());
         }
         let call_key = format!("{request_id}:{call}");
-        let tool_info = self.tools.get(alias);
+        let named_tool = if alias == "chista_mcp_call" {
+            let arguments = &event["params"]["arguments"];
+            let server = arguments["server"].as_str().unwrap_or("");
+            let name = arguments["tool"].as_str().unwrap_or("");
+            if !self
+                .live_tools
+                .contains(&(server.to_string(), name.to_string()))
+            {
+                return self.finish(pipe, event, json!({"error":"This MCP tool is not available in the current catalog. Refresh connections and inspect the catalog before calling it."}), false);
+            }
+            Some(Tool {
+                server: server.into(),
+                name: name.into(),
+            })
+        } else {
+            None
+        };
+        let tool_info = named_tool.as_ref().or_else(|| self.tools.get(alias));
         let result = if alias == "chista_mcp_catalog" {
             rpc(
                 pipe,
@@ -272,7 +353,7 @@ impl Connector {
                 closed,
             )?
         } else {
-            let tool = &self.tools[alias];
+            let tool = tool_info.ok_or("MCP tool is unavailable.")?;
             let input = event["params"]["arguments"]["arguments"].clone();
             if !input.is_object() {
                 return Err("MCP arguments must be an object.".into());
@@ -437,7 +518,7 @@ for line in sys.stdin:
  elif m=='thread/start':
   connector=f['id']==40
   assert f['params']['config']['mcp_servers']['fixture']['enabled']==connector
-  if not connector: assert len(f['params']['dynamicTools'])==3
+  if not connector: assert {t['name'] for t in f['params']['dynamicTools']}=={'chista_mcp_0','chista_mcp_catalog','chista_mcp_call','chista_http_request'}
   emit({'id':f['id'],'result':{'thread':{'id':'connector' if connector else 'analysis'}}})
  elif m=='mcpServerStatus/list':
   emit({'id':f['id'],'result':{'data':[{'name':'fixture','authStatus':'oAuth','tools':{'search':{'name':'search','inputSchema':{'type':'object'}}}}],'nextCursor':None}})
