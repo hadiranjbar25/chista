@@ -1,11 +1,18 @@
 import { Terminal } from 'lucide-react';
 import FullscreenSection from '../../components/FullscreenSection';
+import ModelPicker from './ModelPicker';
 import type { AgentSettings } from './useAgentSettings';
 
 export default function ModelSettings({ settings }: { settings: AgentSettings }) {
   const {
     mode,
     setMode,
+    claudeModel,
+    setClaudeModel,
+    codexModel,
+    setCodexModel,
+    modelCatalogs,
+    loadModels,
     claudePath,
     setClaudePath,
     claudeStatus,
@@ -44,6 +51,15 @@ export default function ModelSettings({ settings }: { settings: AgentSettings })
             </option>
           </select>
         </label>
+        {(mode === 'claude' || mode === 'codex') && (
+          <ModelPicker
+            key={mode}
+            value={mode === 'claude' ? claudeModel : codexModel}
+            {...modelCatalogs[mode]}
+            onChange={mode === 'claude' ? setClaudeModel : setCodexModel}
+            onLoad={(refresh) => void loadModels(mode, refresh)}
+          />
+        )}
         <div className="agent-list">
           <details className="agent-setting">
             <summary>

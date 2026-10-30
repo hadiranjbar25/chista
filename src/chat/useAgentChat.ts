@@ -31,6 +31,7 @@ export function useAgentChat({
   hosted,
   claudePath,
   codexPath = '',
+  model = '',
   onSessionTitle,
   onModelStatus,
   attachments,
@@ -52,7 +53,7 @@ export function useAgentChat({
   const [authStatus, setAuthStatus] = useState('');
   const [toolApproval, setToolApproval] = useState<ToolApproval | null>(null);
   const [mcpServers, setMcpServers] = useState<McpStatus[]>([]);
-  useEffect(() => setMcpServers([]), [mode, codexPath]);
+  useEffect(() => setMcpServers([]), [mode, claudePath, codexPath, model]);
   const toolDecision = useRef<((approved: boolean) => void) | null>(null);
   function decideTool(approved: boolean) {
     toolDecision.current?.(approved);
@@ -90,6 +91,7 @@ export function useAgentChat({
     mode,
     claudePath,
     codexPath,
+    model,
     hosted.endpoint,
     hosted.model,
     hosted.token,
@@ -109,7 +111,7 @@ export function useAgentChat({
       abort.current?.abort();
       conversationState.current.reset();
     };
-  }, [mode, claudePath, codexPath]);
+  }, [mode, claudePath, codexPath, model]);
   useEffect(() => {
     // Revoke an in-flight snapshot when selected repos/evidence change, but retain an idle
     // native thread so the next turn can send only the updated evidence.
@@ -137,7 +139,12 @@ export function useAgentChat({
         executablePath,
       };
       if (mode !== 'hosted')
-        request.turn = conversationState.current.prepare(mode, executablePath, request.request);
+        request.turn = conversationState.current.prepare(
+          mode,
+          executablePath,
+          request.request,
+          model,
+        );
       if (reviewBeforeSending) setPending(request);
       else void execute(request);
     } catch (e) {

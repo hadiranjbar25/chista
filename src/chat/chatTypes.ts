@@ -1,3 +1,4 @@
+import type { ModelCatalog } from '../integrations/models';
 import type { EvidenceSource } from '../evidence/investigation';
 import type { Sanitizer } from '../evidence/safety';
 import type { Repository, ChatAttachments } from '../app/workspaces/workspace';
@@ -13,6 +14,10 @@ export type PendingRequest = {
   turn?: NativeTurn;
 };
 export type AgentChatProps = {
+  model?: string;
+  modelCatalog?: ModelCatalog;
+  onModelChange?: (model: string) => void;
+  onLoadModels?: (refresh?: boolean) => void;
   sharedSanitizer?: Sanitizer;
   onEvidence?: (source: EvidenceSource) => void;
   active?: boolean;

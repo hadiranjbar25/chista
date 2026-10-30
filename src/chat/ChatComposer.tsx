@@ -1,3 +1,4 @@
+import ModelPicker from '../app/settings/ModelPicker';
 import { useEffect, useState } from 'react';
 import { ArrowRight, X } from 'lucide-react';
 import FullscreenSection from '../components/FullscreenSection';
@@ -6,7 +7,16 @@ import type { ChatController } from './useAgentChat';
 
 type Props = Pick<
   AgentChatProps,
-  'onRemoveAttachment' | 'onFiles' | 'onAddFiles' | 'onAgentChange' | 'mode' | 'hosted'
+  | 'onRemoveAttachment'
+  | 'onFiles'
+  | 'onAddFiles'
+  | 'onAgentChange'
+  | 'mode'
+  | 'hosted'
+  | 'model'
+  | 'modelCatalog'
+  | 'onModelChange'
+  | 'onLoadModels'
 > & { chat: ChatController };
 export default function ChatComposer({
   chat,
@@ -16,6 +26,10 @@ export default function ChatComposer({
   onAgentChange,
   mode,
   hosted,
+  model = '',
+  modelCatalog,
+  onModelChange,
+  onLoadModels,
 }: Props) {
   const {
     canSend,
@@ -138,6 +152,17 @@ export default function ChatComposer({
                 <option value="hosted">{hosted.model || 'Hosted provider'}</option>
               )}
             </select>
+          )}
+          {mode !== 'hosted' && onModelChange && onLoadModels && modelCatalog && (
+            <ModelPicker
+              key={mode}
+              compact
+              value={model}
+              {...modelCatalog}
+              onChange={onModelChange}
+              onLoad={onLoadModels}
+              disabled={busy}
+            />
           )}
           <button type="button" disabled={busy || attachments?.busy} onClick={onAddFiles}>
             + Add files

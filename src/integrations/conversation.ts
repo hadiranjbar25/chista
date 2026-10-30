@@ -1,3 +1,4 @@
+import { validModelId } from './models';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { hostedBody, type Message, type ModelRequest } from './providers';
 import {
@@ -7,7 +8,12 @@ import {
 } from './cliInstructions';
 import { repositoryContext } from './repositoryContext';
 
-export type NativeTurn = { sessionKey: string; systemPrompt: string | null; payload: string };
+export type NativeTurn = {
+  sessionKey: string;
+  systemPrompt: string | null;
+  payload: string;
+  model?: string;
+};
 // One instance per Chista session. No provider-owned thread IDs or raw files enter the UI.
 export class CliConversation {
   private key = '';
@@ -19,13 +25,15 @@ export class CliConversation {
     NativeTurn,
     { context: string | null; repositoryNames: string[] }
   >();
-  prepare(agent: string, executablePath: string, request: ModelRequest): NativeTurn {
+  prepare(agent: string, executablePath: string, request: ModelRequest, model = ''): NativeTurn {
+    model = model.trim();
+    if (!validModelId(model)) throw new Error('Enter a valid model ID.');
     const messages = hostedBody('', request).messages;
     const systemPrompt =
       agent === 'codex'
         ? messages[0].content.replace(NO_TOOLS_INSTRUCTION, CODEX_TOOLS_INSTRUCTION)
         : messages[0].content.replace(NO_TOOLS_INSTRUCTION, CLAUDE_TOOLS_INSTRUCTION);
-    const key = JSON.stringify([agent, executablePath, systemPrompt]);
+    const key = JSON.stringify([agent, executablePath, systemPrompt, model]);
     // Redaction discoveries may change earlier UI text. They do not mean that
     // the native thread disappeared or that its whole history needs replaying.
     if (
@@ -53,6 +61,7 @@ export class CliConversation {
           ]
         : [];
     const turn = {
+      ...(model ? { model } : {}),
       sessionKey: this.token,
       systemPrompt: initial ? systemPrompt : null,
       payload: JSON.stringify(
@@ -92,6 +101,7 @@ export class CliConversation {
 export function nativeTurnPreview(turn: NativeTurn) {
   return JSON.stringify(
     {
+      ...(turn.model ? { model: turn.model } : {}),
       ...(turn.systemPrompt !== null ? { systemPrompt: turn.systemPrompt } : {}),
       ...JSON.parse(turn.payload),
     },

@@ -61,7 +61,20 @@ export default function App() {
   const [attachments, setAttachments] = useState<Record<string, ChatAttachments>>({});
   const [contexts, setContexts] = useState<Record<string, string | null>>({});
   const agentSettings = useAgentSettings(setNotice);
-  const { mode, setMode, claudePath, codexPath, hosted, setModelStatuses } = agentSettings;
+  const {
+    mode,
+    setMode,
+    claudePath,
+    codexPath,
+    hosted,
+    setModelStatuses,
+    claudeModel,
+    setClaudeModel,
+    codexModel,
+    setCodexModel,
+    modelCatalogs,
+    loadModels,
+  } = agentSettings;
   const workspace = workspaces.find((w) => w.id === workspaceId)!;
   const workspaceSessions = sessions.filter((s) => s.workspaceId === workspaceId);
   function selectWorkspace(id: string) {
@@ -253,6 +266,12 @@ export default function App() {
                     onRemoveAttachment={(id) => filePickers.current.get(w.id)?.removeAttachment(id)}
                     mode={mode}
                     hosted={hosted}
+                    model={mode === 'claude' ? claudeModel : codexModel}
+                    modelCatalog={mode === 'claude' ? modelCatalogs.claude : modelCatalogs.codex}
+                    onModelChange={mode === 'claude' ? setClaudeModel : setCodexModel}
+                    onLoadModels={(refresh) => {
+                      if (mode === 'claude' || mode === 'codex') void loadModels(mode, refresh);
+                    }}
                     claudePath={claudePath}
                     codexPath={codexPath}
                     onAgentChange={setMode}

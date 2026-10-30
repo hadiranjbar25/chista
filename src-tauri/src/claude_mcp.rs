@@ -60,7 +60,7 @@ pub(super) fn initialize(
     pipe: &Pipe,
     cancelled: &AtomicBool,
     closed: &AtomicBool,
-) -> Result<(), String> {
+) -> Result<Value, String> {
     pipe.send(json!({"type":"control_request","request_id":"chista-init","request":{
         "subtype":"initialize","hooks":{
             "PreToolUse":[{"matcher":"","hookCallbackIds":["chista-pre"],"timeout":360}],
@@ -76,7 +76,7 @@ pub(super) fn initialize(
             return if event["response"]["subtype"] == "success"
                 && event["response"]["response"]["hooks_applied"] == true
             {
-                Ok(())
+                Ok(event["response"]["response"].clone())
             } else {
                 Err("Claude could not initialize MCP tool callbacks. Update Claude Code and try again.".into())
             };

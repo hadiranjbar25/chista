@@ -1567,3 +1567,30 @@ details > p {
     overflow-wrap: anywhere;
   }
 }
+
+.model-picker {
+  margin-bottom: var(--space-4);
+}
+.model-picker-controls,
+.model-picker-custom {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.model-picker-controls .field,
+.model-picker-custom .field {
+  margin: 0;
+  flex: 1;
+  min-width: 160px;
+}
+.model-picker-custom {
+  margin-top: 8px;
+}
+.model-picker-compact {
+  margin: 0;
+  max-width: 100%;
+}
+.model-picker-compact select {
+  max-width: 200px;
+}

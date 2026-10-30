@@ -170,3 +170,32 @@ it('sends repository names once and updates selection within the same native thr
   expect(removed.sessionKey).toBe(first.sessionKey);
   expect(removed.payload).toContain('No repository folders are currently selected');
 });
+
+it.each(['claude', 'codex'])(
+  'reconnects %s with its history when the selected model changes',
+  (agent) => {
+    const session = new CliConversation();
+    const first = session.prepare(
+      agent,
+      '',
+      { messages: [{ role: 'user', content: 'First' }], context: null },
+      'model-one',
+    );
+    expect(first.model).toBe('model-one');
+    const history: Message[] = [
+      { role: 'user', content: 'First' },
+      { role: 'assistant', content: 'Answer' },
+    ];
+    session.commit(first, history);
+    const messages: Message[] = [...history, { role: 'user', content: 'Next' }];
+    const same = session.prepare(agent, '', { messages, context: null }, 'model-one');
+    expect(same.sessionKey).toBe(first.sessionKey);
+    expect(same.systemPrompt).toBeNull();
+    const changed = session.prepare(agent, '', { messages, context: null }, 'model-two');
+    expect(changed.sessionKey).not.toBe(first.sessionKey);
+    expect(changed.systemPrompt).not.toBeNull();
+    expect(changed.model).toBe('model-two');
+    expect(JSON.parse(changed.payload).messages).toEqual(messages);
+    expect(JSON.parse(nativeTurnPreview(changed)).model).toBe('model-two');
+  },
+);

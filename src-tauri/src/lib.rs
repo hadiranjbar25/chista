@@ -25,6 +25,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             repositories::select_repository_folder,
             persistent::mcp::respond_agent_tool,
+            persistent::models::agent_models,
             claude::codex_mcp_sign_in,
             claude::claude_mcp_sign_in,
             persistent::agent_session_chat,

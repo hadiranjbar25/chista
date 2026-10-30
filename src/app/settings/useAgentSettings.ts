@@ -1,6 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { hostedProvider, type HostedConfig } from '../../integrations/providers';
+
+import {
+  emptyModelCatalog,
+  type CliAgent,
+  type ModelCatalog,
+  type ModelChoice,
+} from '../../integrations/models';
 
 export function useAgentSettings(setNotice: (notice: string) => void) {
   const [mode, setMode] = useState('codex');
@@ -8,6 +15,50 @@ export function useAgentSettings(setNotice: (notice: string) => void) {
   const [claudeStatus, setClaudeStatus] = useState('Not checked');
   const [codexPath, setCodexPath] = useState('');
   const [codexStatus, setCodexStatus] = useState('Not checked');
+  const [claudeModel, setClaudeModel] = useState('');
+  const [codexModel, setCodexModel] = useState('');
+  const [modelCatalogs, setModelCatalogs] = useState<Record<CliAgent, ModelCatalog>>({
+    claude: emptyModelCatalog(),
+    codex: emptyModelCatalog(),
+  });
+  const catalogVersions = useRef({ claude: 0, codex: 0 });
+  useEffect(() => {
+    catalogVersions.current.claude++;
+    setModelCatalogs((all) => ({ ...all, claude: emptyModelCatalog() }));
+  }, [claudePath]);
+  useEffect(() => {
+    catalogVersions.current.codex++;
+    setModelCatalogs((all) => ({ ...all, codex: emptyModelCatalog() }));
+  }, [codexPath]);
+  async function loadModels(agent: CliAgent, refresh = false) {
+    const catalog = modelCatalogs[agent];
+    if (catalog.loading || (catalog.loaded && !refresh)) return;
+    const version = ++catalogVersions.current[agent];
+    setModelCatalogs((all) => ({ ...all, [agent]: { ...all[agent], loading: true, error: '' } }));
+    try {
+      if (!isTauri()) throw new Error('Desktop required');
+      const options = await invoke<ModelChoice[]>('agent_models', {
+        agent,
+        executablePath: agent === 'claude' ? claudePath : codexPath,
+      });
+      if (catalogVersions.current[agent] === version)
+        setModelCatalogs((all) => ({
+          ...all,
+          [agent]: { options, loading: false, loaded: true, error: '' },
+        }));
+    } catch {
+      if (catalogVersions.current[agent] === version)
+        setModelCatalogs((all) => ({
+          ...all,
+          [agent]: {
+            ...all[agent],
+            loading: false,
+            loaded: false,
+            error: 'Could not load models. Use the CLI default or enter a custom model ID.',
+          },
+        }));
+    }
+  }
   const [hosted, setHosted] = useState<HostedConfig>({ endpoint: '', model: '', token: '' });
   const [hostedDraft, setHostedDraft] = useState<HostedConfig>({
     endpoint: '',
@@ -73,6 +124,12 @@ export function useAgentSettings(setNotice: (notice: string) => void) {
   return {
     mode,
     setMode,
+    claudeModel,
+    setClaudeModel,
+    codexModel,
+    setCodexModel,
+    modelCatalogs,
+    loadModels,
     claudePath,
     setClaudePath,
     claudeStatus,

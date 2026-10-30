@@ -23,12 +23,15 @@ mod http;
 mod http_request;
 #[path = "session_mcp.rs"]
 pub mod mcp;
+#[path = "agent_models.rs"]
+pub mod models;
 
 #[derive(Default, Clone)]
 pub struct Sessions(Arc<Mutex<HashMap<String, Arc<Entry>>>>);
 struct Entry {
     agent: String,
     binary: PathBuf,
+    model: String,
     closed: AtomicBool,
     session: Mutex<Option<Session>>,
 }
@@ -63,6 +66,7 @@ pub async fn agent_session_chat(
     session_key: String,
     agent: String,
     executable_path: String,
+    model: Option<String>,
     system_prompt: Option<String>,
     payload: String,
     on_event: Channel<Value>,
@@ -79,12 +83,18 @@ pub async fn agent_session_chat(
     {
         return Err("Invalid agent session request.".into());
     }
+    let model = model.unwrap_or_default().trim().to_string();
+    models::validate_model(&model)?;
     let binary = resolve_cli(&executable_path, &agent)?;
     let sessions = sessions.inner().clone();
     let entry = {
         let mut entries = sessions.0.lock().unwrap();
         if let Some(entry) = entries.get(&session_key) {
-            if entry.agent != agent || entry.binary != binary || system_prompt.is_some() {
+            if entry.agent != agent
+                || entry.binary != binary
+                || entry.model != model
+                || system_prompt.is_some()
+            {
                 return Err(
                     "Session configuration changed. Send again to start a fresh session.".into(),
                 );
@@ -104,6 +114,7 @@ pub async fn agent_session_chat(
             let entry = Arc::new(Entry {
                 agent: agent.clone(),
                 binary: binary.clone(),
+                model: model.clone(),
                 closed: AtomicBool::new(false),
                 session: Mutex::new(None),
             });
@@ -143,10 +154,11 @@ pub async fn agent_session_chat(
                 let instructions = system_prompt
                     .as_deref()
                     .ok_or("Agent session is not ready.")?;
-                *session = Some(Session::start(
+                *session = Some(Session::start_with_model(
                     binary,
                     &agent,
                     instructions,
+                    &model,
                     &cancelled,
                     &entry.closed,
                 )?);
@@ -302,10 +314,21 @@ struct Session {
     _claude_settings: Option<tempfile::NamedTempFile>,
 }
 impl Session {
+    #[cfg(test)]
     fn start(
         binary: PathBuf,
         agent: &str,
         instructions: &str,
+        cancelled: &AtomicBool,
+        closed: &AtomicBool,
+    ) -> Result<Self, String> {
+        Self::start_with_model(binary, agent, instructions, "", cancelled, closed)
+    }
+    fn start_with_model(
+        binary: PathBuf,
+        agent: &str,
+        instructions: &str,
+        model: &str,
         cancelled: &AtomicBool,
         closed: &AtomicBool,
     ) -> Result<Self, String> {
@@ -314,6 +337,9 @@ impl Session {
         let mut command = Command::new(binary);
         command.current_dir(directory.path());
         if agent == "claude" {
+            if !model.is_empty() {
+                command.arg(format!("--model={model}"));
+            }
             let settings = crate::claude_settings::user_settings()?;
             command.arg("--settings").arg(settings.path());
             command.args([
@@ -396,7 +422,7 @@ impl Session {
                     let config = mcp::analysis_config(&event["result"]["config"])?;
                     let mut tools = mcp.as_ref().map(|c| c.definitions()).unwrap_or_default();
                     tools.push(http::definition());
-                    pipe.send(json!({"id":3,"method":"thread/start","params":{"cwd":directory.path(),"ephemeral":true,"approvalPolicy":"never","permissions":"chista","environments":[],"config":config,"baseInstructions":instructions,"dynamicTools":tools}}))?;
+                    pipe.send(json!({"id":3,"method":"thread/start","params":{"cwd":directory.path(),"ephemeral":true,"approvalPolicy":"never","permissions":"chista","environments":[],"config":config,"baseInstructions":instructions,"dynamicTools":tools,"model":if model.is_empty() {Value::Null} else {json!(model)}}}))?;
                 }
                 Some(3) => {
                     break event["result"]["thread"]["id"]
@@ -606,6 +632,7 @@ mode=MODE
 frames=Path(__file__).with_suffix('.frames')
 def emit(value): print(json.dumps(value),flush=True)
 args=sys.argv[1:]
+Path(__file__).with_suffix('.args').write_text(json.dumps(args))
 assert '--safe-mode' not in args if mode=='claude' else '--strict-config' in args
 if mode=='claude':
  assert args[args.index('--input-format')+1]=='stream-json'
@@ -659,6 +686,48 @@ for line in sys.stdin:
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
         (dir, path)
     }
+    #[test]
+    fn selected_model_reaches_both_native_backends() {
+        for agent in ["claude", "codex"] {
+            let (_dir, binary) = fixture(agent);
+            let cancelled = AtomicBool::new(false);
+            let closed = AtomicBool::new(false);
+            let mut session = Session::start_with_model(
+                binary.clone(),
+                agent,
+                "FORMAT_ONCE",
+                "fixture-model",
+                &cancelled,
+                &closed,
+            )
+            .unwrap();
+            assert_eq!(
+                session
+                    .turn("first", &Channel::new(|_| Ok(())), &cancelled, &closed)
+                    .unwrap(),
+                "1:first"
+            );
+            if agent == "claude" {
+                let args: Value = serde_json::from_str(
+                    &std::fs::read_to_string(binary.with_extension("args")).unwrap(),
+                )
+                .unwrap();
+                assert!(args
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("--model=fixture-model")));
+            } else {
+                let frames = std::fs::read_to_string(binary.with_extension("frames")).unwrap();
+                let frame: Value = frames
+                    .lines()
+                    .map(|line| serde_json::from_str::<Value>(line).unwrap())
+                    .find(|frame| frame["method"] == "thread/start")
+                    .unwrap();
+                assert_eq!(frame["params"]["model"], "fixture-model");
+            }
+        }
+    }
+
     #[test]
     fn both_agents_keep_memory_and_send_initialization_only_once() {
         for agent in ["claude", "codex"] {
@@ -732,6 +801,7 @@ for line in sys.stdin:
             Arc::new(Entry {
                 agent: "claude".into(),
                 binary,
+                model: String::new(),
                 closed: AtomicBool::new(false),
                 session: Mutex::new(Some(first)),
             }),
@@ -780,6 +850,7 @@ mod shutdown_tests {
         let entry = Arc::new(Entry {
             agent: "claude".into(),
             binary: PathBuf::new(),
+            model: String::new(),
             closed: AtomicBool::new(false),
             session: Mutex::new(None),
         });
