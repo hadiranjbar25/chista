@@ -79,11 +79,6 @@ export default function ModelPicker({
           </button>
         )}
       </div>
-      {compact && loading && (
-        <span className="muted" role="status">
-          Loading {agentLabel} models…
-        </span>
-      )}
       {custom && (
         <div className="model-picker-custom">
           <label className="field">
@@ -111,7 +106,7 @@ export default function ModelPicker({
           {validation}
         </p>
       )}
-      {error && (
+      {!compact && error && (
         <p className="muted" role="status">
           {error}
         </p>

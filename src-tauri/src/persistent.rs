@@ -143,6 +143,7 @@ pub async fn agent_session_chat(
         };
         if let Some(native) = session.as_mut() {
             native.retain_after_error = false;
+            native.failure_detail = None;
         }
         let mut result = (|| {
             on_event
@@ -200,13 +201,15 @@ pub async fn agent_session_chat(
                         .try_wait()
                         .is_ok_and(|status| status.is_none())
             });
-        if retained {
+        let detail = session.as_ref().and_then(|native| native.failure_detail.clone());
+        if retained || (result.is_err() && detail.is_some()) {
             // Carry retention in the final IPC error, not only an asynchronous
             // event that could arrive after the promise has already rejected.
             result = result.map_err(|message| {
-                json!({"code":"session_retained","message":message}).to_string()
+                json!({"code":if retained {"session_retained"} else {"session_ended"},"message":message,"detail":detail}).to_string()
             });
-        } else if result.is_err() {
+        }
+        if result.is_err() && !retained {
             *session = None;
         }
         drop(session);
@@ -362,6 +365,7 @@ struct Session {
     active_turn: Option<String>,
     retain_after_error: bool,
     pending_tool: bool,
+    failure_detail: Option<Value>,
 }
 impl Session {
     fn start(
@@ -417,6 +421,7 @@ impl Session {
                 active_turn: None,
                 retain_after_error: false,
                 pending_tool: false,
+                failure_detail: None,
             });
         }
         let file = directory.path().join("instructions.md");
@@ -491,6 +496,7 @@ impl Session {
             active_turn: None,
             retain_after_error: false,
             pending_tool: false,
+            failure_detail: None,
         })
     }
     #[cfg(test)]
@@ -535,6 +541,7 @@ impl Session {
         model: &str,
     ) -> Result<String, String> {
         self.retain_after_error = false;
+        self.failure_detail = None;
         self.pending_tool = false;
         if cancelled.load(Ordering::SeqCst) || closed.load(Ordering::SeqCst) {
             return Err("Request cancelled.".into());
@@ -583,7 +590,7 @@ impl Session {
                 claude_mcp::status(&event, events)?;
                 if event["type"] == "control_request" {
                     self.pending_tool = true;
-                    claude_mcp::control(
+                    let failure = claude_mcp::control(
                         &self.pipe,
                         &event,
                         events,
@@ -595,6 +602,14 @@ impl Session {
                         &mut seen_calls,
                     )?;
                     self.pending_tool = false;
+                    if let Some(message) = failure {
+                        // Interrupt at the outstanding failure hook instead of
+                        // destroying the process and replaying the conversation.
+                        if claude_pending.is_empty() {
+                            let _ = self.interrupt(closed);
+                        }
+                        return Err(message);
+                    }
                     started = Instant::now();
                     continue;
                 }
@@ -610,6 +625,9 @@ impl Session {
                     self.active_request = None;
                     self.retain_after_error = true;
                     if event["is_error"] == true || event["subtype"] != "success" {
+                        self.failure_detail = Some(
+                            json!({"errors":event["errors"],"error":event["error"],"result":event["result"]}),
+                        );
                         return Err(claude_failure(&event));
                     }
                     return event["result"]

@@ -1,7 +1,12 @@
 import type { ToolHooks } from '../integrations/cliTools';
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { claudeProvider, codexProvider, RetainedTurnError } from '../integrations/claude';
+import {
+  claudeProvider,
+  codexProvider,
+  NativeTurnError,
+  RetainedTurnError,
+} from '../integrations/claude';
 import {
   contextEvidence,
   updateActivity,
@@ -13,6 +18,7 @@ import { useComposerAttachments } from './useComposerAttachments';
 import { CliConversation } from '../integrations/conversation';
 import { ensureCliSignIn } from '../integrations/signIn';
 import type { ToolApproval, McpStatus } from '../integrations/cliTools';
+import { sanitizedResult } from '../integrations/cliTools';
 import { Sanitizer } from '../evidence/safety';
 import { hostedProvider, prepareRequest, type Message } from '../integrations/providers';
 import { parseReply } from './response';
@@ -78,6 +84,7 @@ export function useAgentChat({
   const [pending, setPending] = useState<PendingRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [reconnectRequired, setReconnectRequired] = useState(false);
   const sanitizer = useRef(sharedSanitizer ?? new Sanitizer('CHAT'));
   const composer = useRef<HTMLTextAreaElement>(null);
   const { content: conversation, paused: scrollPaused, jumpToLatest } = useChatScroll(active);
@@ -118,6 +125,7 @@ export function useAgentChat({
     mcpLoginPending.current = null;
     setRefreshingMcp(false);
     setOpeningMcpLogin(false);
+    setReconnectRequired(false);
     conversationState.current.reset();
     return () => {
       abort.current?.abort();
@@ -131,6 +139,7 @@ export function useAgentChat({
   }, [context, repoSignature]);
   const canSend =
     !busy &&
+    !reconnectRequired &&
     !refreshingMcp &&
     !openingMcpLogin &&
     !attachments?.busy &&
@@ -259,7 +268,10 @@ export function useAgentChat({
       if (submitted && snapshot.mode !== 'hosted') {
         if (error instanceof RetainedTurnError && snapshot.turn)
           conversationState.current.commit(snapshot.turn, snapshot.request.messages);
-        else conversationState.current.reset();
+        else {
+          conversationState.current.reset();
+          setReconnectRequired(true);
+        }
       }
       if (mounted.current && submitted) setMessages(snapshot.request.messages);
       if (snapshot.mode === 'hosted')
@@ -267,12 +279,51 @@ export function useAgentChat({
           JSON.stringify([snapshot.config.endpoint, snapshot.config.model]),
           'Error · last request failed or cancelled',
         );
-      if (mounted.current)
+      if (mounted.current) {
+        let detail = 'Request failed without additional CLI error details.';
+        try {
+          detail = sanitizedResult(
+            error instanceof NativeTurnError && error.detail != null
+              ? error.detail
+              : { error: String(error) },
+            (text) => sanitizer.current.sanitize(text, 'json', []),
+          ).slice(0, 60000);
+        } catch {
+          /* Keep a static diagnostic if sanitization fails. */
+        }
+        if (submitted && !abort.current?.signal.aborted)
+          setActivities((all) => {
+            const items = all[turnIndex] ?? [];
+            if (items.some((item) => item.state === 'failed' && item.detail)) return all;
+            if (items.some((item) => ['approval', 'running'].includes(item.state)))
+              return {
+                ...all,
+                [turnIndex]: items.map((item) =>
+                  ['approval', 'running'].includes(item.state)
+                    ? { ...item, state: 'failed' as const, detail }
+                    : item,
+                ),
+              };
+            return {
+              ...all,
+              [turnIndex]: [
+                ...items,
+                {
+                  id: `request-error-${turnIndex}`,
+                  server: agentLabel,
+                  tool: 'request',
+                  state: 'failed',
+                  detail,
+                },
+              ],
+            };
+          });
         setNotice(
           snapshot.mode !== 'hosted'
-            ? `${String(error)} No automatic retry was made.`
+            ? `${sanitizer.current.text(String(error))} No automatic retry was made.`
             : 'Request failed or was cancelled. Check integration status and permissions. No automatic retry was made.',
         );
+      }
     } finally {
       inFlight.current = false;
       if (mounted.current) {
@@ -384,6 +435,14 @@ export function useAgentChat({
     setPending,
     busy,
     notice,
+    reconnectRequired,
+    reconnect: () => {
+      conversationState.current.reset();
+      setReconnectRequired(false);
+      setNotice(
+        'Ready to reconnect. Your next message will include the conversation and attached context.',
+      );
+    },
     composer,
     composerAttachments,
     conversation,

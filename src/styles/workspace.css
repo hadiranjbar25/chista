@@ -711,6 +711,13 @@ details > p {
 .composer-actions .muted {
   font-size: 9px;
 }
+.composer-model-status {
+  margin: 0;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .response-widget {
   background: #fff;
   border: 1px solid #e7e1ed;

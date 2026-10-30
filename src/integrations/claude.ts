@@ -9,7 +9,15 @@ export function claudePayload(request: ModelRequest): string {
 
 // The native process acknowledged a completed/interrupted turn and retained
 // its conversation. Reconnect only when that acknowledgement is absent.
-export class RetainedTurnError extends Error {}
+export class NativeTurnError extends Error {
+  constructor(
+    message: string,
+    public detail?: unknown,
+  ) {
+    super(message);
+  }
+}
+export class RetainedTurnError extends NativeTurnError {}
 
 type ClaudeEvent =
   | { type: 'session_retained' }
@@ -96,14 +104,16 @@ function cliProvider(
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        let failure: { code?: unknown; message?: unknown } | null = null;
+        let failure: { code?: unknown; message?: unknown; detail?: unknown } | null = null;
         try {
           failure = JSON.parse(message);
         } catch {
           /* Older/native transport errors are plain text. */
         }
         if (failure?.code === 'session_retained' && typeof failure.message === 'string')
-          throw new RetainedTurnError(failure.message);
+          throw new RetainedTurnError(failure.message, failure.detail);
+        if (failure?.code === 'session_ended' && typeof failure.message === 'string')
+          throw new NativeTurnError(failure.message, failure.detail);
         if (retained) throw new RetainedTurnError(message);
         throw error;
       } finally {

@@ -194,6 +194,11 @@ export default function ChatComposer({
           </button>
         )}
       </div>
+      {(mode === 'claude' || mode === 'codex') && modelCatalog?.error && (
+        <p className="composer-model-status muted" role="status">
+          {modelCatalog.error}
+        </p>
+      )}
     </form>
   );
 }

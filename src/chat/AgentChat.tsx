@@ -31,6 +31,12 @@ export default function AgentChat(props: AgentChatProps) {
           {chat.notice}
         </div>
       )}
+      {chat.reconnectRequired && (
+        <div className="notice">
+          <p>The agent connection ended. Your context will not be resent until you reconnect.</p>
+          <button onClick={chat.reconnect}>Reconnect with context</button>
+        </div>
+      )}
       {chat.pending && (
         <RequestReview
           pending={chat.pending}

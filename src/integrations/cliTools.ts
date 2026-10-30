@@ -40,7 +40,7 @@ export type ToolEvent =
 
 // MCP text parts may themselves contain JSON. Discover structured sensitive
 // fields there before serializing the outer envelope (e.g. name or user_id).
-function sanitizedResult(result: unknown, sanitize: (text: string) => string) {
+export function sanitizedResult(result: unknown, sanitize: (text: string) => string) {
   if (
     result &&
     typeof result === 'object' &&

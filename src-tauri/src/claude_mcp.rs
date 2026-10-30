@@ -144,8 +144,9 @@ pub(super) fn set_model(
     }
 }
 
-fn reply(pipe: &Pipe, event: &Value, response: Value) -> Result<(), String> {
+fn reply(pipe: &Pipe, event: &Value, response: Value) -> Result<Option<String>, String> {
     pipe.send(json!({"type":"control_response","response":{"subtype":"success","request_id":event["request_id"],"response":response}}))
+        .map(|_| None)
 }
 
 pub(super) fn status(event: &Value, events: &Channel<Value>) -> Result<(), String> {
@@ -187,7 +188,7 @@ pub(super) fn control(
     closed: &AtomicBool,
     pending: &mut HashMap<String, PendingTool>,
     seen: &mut std::collections::HashSet<String>,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     let bridge = &event["request"];
     if bridge["subtype"] == "mcp_message"
         && bridge["server_name"] == claude_tools::SERVER
@@ -201,7 +202,7 @@ pub(super) fn control(
     if claude_tools::call(
         pipe, event, events, approvals, request_id, cancelled, closed,
     )? {
-        return Ok(());
+        return Ok(None);
     }
     let request = &event["request"];
     if request["subtype"] == "can_use_tool" {
@@ -336,11 +337,11 @@ pub(super) fn control(
         safe["content"]
             .as_str()
             .ok_or("Sanitized MCP error missing.")?;
-        // Failure hooks cannot replace the native error text. End this turn
-        // before Claude can consume an unsanitized transport/server error.
-        return Err(
+        // Leave this callback unanswered. The caller interrupts the CLI while
+        // it is still blocked here, before raw error text enters model history.
+        return Ok(Some(
             "Claude MCP tool failed. See tool activity for sanitized error details.".into(),
-        );
+        ));
     }
     if callback != "chista-post" || hook != "PostToolUse" {
         return Err("Unexpected Claude tool callback.".into());
@@ -403,6 +404,11 @@ tool='Bash' if scenario=='builtin' else 'mcp__fixture__search'
 def hook(callback,event):
  emit({'type':'control_request','request_id':callback,'request':{'subtype':'hook_callback','callback_id':callback,'input':{'hook_event_name':event,'tool_name':tool,'tool_use_id':'discovery' if tool in ['ToolSearch','WaitForMcpServers'] else 'call','tool_input':{'query':'original@example.com'},'error':'401 Unauthorized for private@example.com','tool_response':{'content':[{'type':'tool_reference','tool_name':'mcp__fixture__search'}]} if tool in ['ToolSearch','WaitForMcpServers'] else {'content':[{'type':'text','text':'private@example.com'},{'type':'image','data':'PRIVATE_BINARY'}]}}}})
  if scenario=='failure' and event=='PostToolUseFailure':
+  f=read();assert f['request']['subtype']=='interrupt'
+  emit({'type':'control_response','response':{'subtype':'success','request_id':f['request_id'],'response':{}}})
+  emit({'type':'result','subtype':'error_during_execution','is_error':True,'errors':['Interrupted']})
+  f=read();assert f['type']=='user' and f['message']['content']=='Follow up only'
+  emit({'type':'result','subtype':'success','is_error':False,'result':'Continued'})
   sys.stdin.read();sys.exit()
  return read()['response']['response'].get('hookSpecificOutput',{})
 if scenario in ['tool-search','wait-for-servers']:
@@ -485,6 +491,22 @@ sys.stdin.read()
             if ["failure", "duplicate", "unreviewed"].contains(&scenario) {
                 assert!(result.is_err(), "{scenario}");
                 assert!(!result.unwrap_err().contains("private@example.com"));
+                if scenario == "failure" {
+                    assert!(session.retain_after_error);
+                    assert_eq!(
+                        session
+                            .turn_with_tools(
+                                "Follow up only",
+                                &channel,
+                                &cancelled,
+                                &closed,
+                                &approvals,
+                                "next"
+                            )
+                            .unwrap(),
+                        "Continued"
+                    );
+                }
             } else {
                 assert_eq!(result.unwrap(), "Done", "{scenario}");
             }
