@@ -7,8 +7,8 @@ export default function GeneralSettings({ setNotice }: { setNotice: (notice: str
       <div className="page-heading">
         <div className="view-title">
           <div className="eyebrow">PREFERENCES & PRIVACY</div>
-          <h1>Settings</h1>
-          <p>Clear boundaries for your debugging workspace.</p>
+          <h1>Data &amp; privacy</h1>
+          <p>See what stays in memory, what is saved, and how to remove it.</p>
         </div>
       </div>
       <FullscreenSection title="Data handling" className="focus-panel">
@@ -29,16 +29,18 @@ export default function GeneralSettings({ setNotice }: { setNotice: (notice: str
             </span>
           </div>
           <div>
-            <strong>Chat, context and integration tokens</strong>
+            <strong>Chat and context</strong>
             <span>
-              Memory only. Review before sending is optional; sanitization always runs locally.
+              Kept in memory unless you explicitly save an encrypted investigation or export a
+              reviewed bundle. Sanitization always runs locally.
             </span>
           </div>
           <div>
             <strong>Claude Code</strong>
             <span>
-              In-app chat uses the installed CLI with tools disabled and sanitized context only.
-              Each session keeps an isolated CLI connection; closing the session releases it.
+              In-app chat uses the installed CLI with sanitized context and individually approved
+              MCP/API tools. Shell and repository file tools are disabled. Each session keeps an
+              isolated CLI connection; closing the session releases it.
             </span>
           </div>
           <div>
@@ -52,8 +54,23 @@ export default function GeneralSettings({ setNotice }: { setNotice: (notice: str
           <div>
             <strong>Sanitization</strong>
             <span>
-              Pattern based; review every export and outgoing request. Custom sensitive values can
-              be added in Safe Debug.
+              Pattern based; review every export and outgoing request. Custom sensitive values and
+              encrypted profiles are available in Files & mappings.
+            </span>
+          </div>
+          <div>
+            <strong>Provider and MCP credentials</strong>
+            <span>
+              Chista-managed credentials are stored in the OS credential store. Manage provider
+              tokens in Models and connector credentials in Workspace security. Native CLI sign-in
+              remains managed by the CLI.
+            </span>
+          </div>
+          <div>
+            <strong>Saved investigations and profiles</strong>
+            <span>
+              Encrypted files are saved only when you choose Save in Files &amp; mappings. Delete
+              them using your file manager. Chista does not upload or synchronize them.
             </span>
           </div>
           <button

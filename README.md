@@ -95,3 +95,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 `npm run build` checks TypeScript and builds the frontend. Use the Tauri build commands above to create installers. The [access-investigation guide](docs/INVESTIGATION.md#checks) documents the MCP connector smoke check; [demo/video/README.md](demo/video/README.md) covers the Remotion demo.
+
+Security controls and limits are documented in [docs/SECURITY.md](docs/SECURITY.md). Workspace configuration now controls local HTTP debugging origins and approved MCP connectors. Files & mappings includes encrypted investigation/profile saves, sanitized share-bundle previews, and read-only action history. Import Sentry event JSON or OpenTelemetry JSON/JSONL exports through the existing local file picker. All shipped capabilities remain available without a subscription; no payment processing is included.
+
+Chat now includes registered debugging playbooks (`/investigate-error`, `/compare-traces`, `/incident-report`), a sourced investigation checklist, and Branch from here on message checkpoints. Branches preserve the original session and use separate native conversations with fresh approvals. See [the investigation guide](docs/INVESTIGATION.md) for workflow and checkpoint limits.

@@ -4,6 +4,10 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { samples } from '../testing/test-fixtures';
+vi.mock('../integrations/credentialVault', () => ({
+  saveCredential: vi.fn(async () => {}),
+  removeCredential: vi.fn(async () => {}),
+}));
 const folderPicker = vi.hoisted(() => vi.fn());
 vi.mock('../integrations/repositories', () => ({ selectRepositoryFolder: folderPicker }));
 beforeEach(() => {
@@ -56,7 +60,7 @@ it('keeps hosted settings across navigation, clears credentials, and never saves
   expect((screen.getByLabelText('Model identifier') as HTMLInputElement).value).toBe('debug-model');
   expect(
     (screen.getByLabelText('Provider API token · not CLI credentials') as HTMLInputElement).value,
-  ).toBe('private-test-token');
+  ).toBe('');
   expect(JSON.stringify(localStorage)).not.toContain('private-test-token');
   expect(JSON.stringify(localStorage)).not.toContain('provider.example.com');
   await user.click(screen.getByRole('button', { name: 'Clear' }));
@@ -89,12 +93,12 @@ describe('conversation workspace', () => {
     expect(await screen.findByText(/Codex chat requires the Tauri desktop app/)).toBeTruthy();
     expect(screen.getByRole('log').querySelectorAll('.message')).toHaveLength(0);
     await user.click(screen.getByRole('button', { name: 'Settings' }));
-    await user.click(screen.getByRole('button', { name: 'Models' }));
+    expect(screen.getByLabelText('Active agent')).toBeTruthy();
     expect(
       within(screen.getByRole('navigation', { name: 'Settings sections' }))
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['General', 'Models']);
+    ).toEqual(['Models', 'Workspace security', 'Data & privacy']);
     const selector = screen.getByLabelText('Active agent') as HTMLSelectElement;
     expect(selector.value).toBe('codex');
     expect(Array.from(selector.options).map((o) => o.value)).toEqual(['claude', 'codex', 'hosted']);
@@ -266,7 +270,9 @@ it.each(['+ Add files'])(
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: 'New session' }));
-    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    const inputs = document.querySelectorAll<HTMLInputElement>(
+      'input[aria-label="Import debug files"]',
+    );
     const picker = vi.fn();
     expect(inputs).toHaveLength(1);
     inputs[0].addEventListener('click', picker);

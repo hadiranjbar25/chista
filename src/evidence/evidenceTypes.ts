@@ -8,6 +8,9 @@ export type SafeSessionHandle = {
   removeAttachment: (id: string) => void;
 };
 export type SafeSessionProps = {
+  extraMappings?: import('./safety').RedactionMapping[];
+  conversations?: import('../integrations/providers').Message[][];
+  workspaceId?: string;
   sharedSanitizer?: Sanitizer;
   extraEvidence?: EvidenceSource[];
   ref?: Ref<SafeSessionHandle>;

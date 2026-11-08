@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { NO_TOOLS_INSTRUCTION } from './cliInstructions';
 import { readChatStream } from './stream';
 import { desktopFetch, endpoint } from './transport';
@@ -20,7 +21,12 @@ export interface ModelProvider {
     onText?: (text: string) => void,
   ): Promise<string>;
 }
-export type HostedConfig = { endpoint: string; model: string; token: string };
+export type HostedConfig = {
+  endpoint: string;
+  model: string;
+  token: string;
+  credentialAccount?: string;
+};
 export function hostedProvider(
   config: HostedConfig,
   send: typeof fetch = desktopFetch,
@@ -32,12 +38,15 @@ export function hostedProvider(
     label: config.model,
     mode: 'hosted',
     async complete(request, signal, onText) {
+      const token = config.credentialAccount
+        ? await invoke<string | null>('read_credential', { account: config.credentialAccount })
+        : config.token;
       const response = await send(url, {
         method: 'POST',
         signal,
         headers: {
           'Content-Type': 'application/json',
-          ...(config.token ? { Authorization: `Bearer ${config.token}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(hostedBody(config.model, request)),
       });

@@ -24,6 +24,10 @@ sys.stdin.read()
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
+        crate::security::enter(crate::security::Policy {
+            origins: vec![format!("http://{address}")],
+            servers: vec![],
+        });
         let server = if allowed {
             Some(std::thread::spawn(move || {
                 let start = Instant::now();

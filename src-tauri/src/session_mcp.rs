@@ -35,6 +35,20 @@ impl Approvals {
         cancelled: &AtomicBool,
         closed: &AtomicBool,
     ) -> Result<Value, String> {
+        let kind = if event["kind"] == "http" {
+            "http"
+        } else {
+            "mcp"
+        };
+        crate::security::audit(
+            kind,
+            if event["type"] == "tool_approval" {
+                "approval-requested"
+            } else {
+                "result-received"
+            },
+        );
+        let is_approval = event["type"] == "tool_approval";
         let (tx, rx) = mpsc::channel();
         self.0.lock().unwrap().insert(id.clone(), tx);
         event["id"] = json!(id);
@@ -56,6 +70,15 @@ impl Approvals {
             }
         })();
         self.0.lock().unwrap().remove(&id);
+        crate::security::audit(
+            kind,
+            match &result {
+                Ok(value) if is_approval && value["approved"] == true => "approved-once",
+                Ok(_) if is_approval => "denied",
+                Ok(_) => "sanitized-result-returned",
+                Err(_) => "cancelled-or-expired",
+            },
+        );
         result
     }
 }
@@ -108,8 +131,21 @@ pub fn safe_servers(config: &Value) -> Result<(Value, Vec<String>), String> {
                 .as_str()
                 .is_some_and(|command| !command.trim().is_empty())
                 && value["url"].is_null();
-            let allowed = value["enabled"] != false && (remote || stdio);
+            let allowed = crate::security::configuration_allowed(name, value)
+                && value["enabled"] != false
+                && (remote || stdio);
             if allowed {
+                let secrets = crate::security::connector_secrets(name)?;
+                for field in ["env", "http_headers"] {
+                    if let Some(values) = secrets[field].as_object() {
+                        if !overrides["mcp_servers"][name][field].is_object() {
+                            overrides["mcp_servers"][name][field] = json!({});
+                        }
+                        for (key, value) in values {
+                            overrides["mcp_servers"][name][field][key] = value.clone();
+                        }
+                    }
+                }
                 overrides["mcp_servers"][name]["enabled"] = json!(true);
                 names.push(name.clone());
             }
@@ -448,6 +484,10 @@ mod tests {
     use super::*;
     #[test]
     fn configured_stdio_https_and_loopback_servers_can_start() {
+        crate::security::enter(crate::security::Policy {
+            origins: vec![],
+            servers: vec!["remote".into(), "local".into(), "loopback".into()],
+        });
         let (config, names) = safe_servers(&json!({"mcp_servers":{
             "remote":{"url":"https://example.com/mcp","headers":{"secret":"private"},"tool_timeout_sec":null},
             "local":{"command":"cat","args":["/private/file"]},
@@ -500,6 +540,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn proxy_requires_approval_and_only_returns_sanitized_results_to_analysis() {
+        crate::security::enter(crate::security::Policy {
+            origins: vec![],
+            servers: vec!["codex:fixture".into(), "claude:fixture".into()],
+        });
         use std::os::unix::fs::PermissionsExt;
         for (allowed, sanitized) in [(true, true), (false, true), (true, false)] {
             let dir = tempfile::tempdir().unwrap();

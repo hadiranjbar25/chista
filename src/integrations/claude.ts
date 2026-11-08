@@ -92,6 +92,7 @@ function cliProvider(
       try {
         const result = await invoke<string>(turn ? 'agent_session_chat' : `${agent}_chat`, {
           requestId,
+          workspaceId: tools?.workspaceId,
           executablePath,
           ...(turn ? { agent, ...turn } : { payload: claudePayload(request) }),
           onEvent: events,

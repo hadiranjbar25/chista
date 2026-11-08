@@ -1,3 +1,12 @@
+import {
+  preparePlaybook,
+  newTasks,
+  applyTaskUpdates,
+  type PlaybookId,
+  type InvestigationTask,
+  taskStatus,
+} from './playbooks';
+import { branchCheckpoint, type Checkpoint } from './checkpoints';
 import type { ToolHooks } from '../integrations/cliTools';
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -30,6 +39,10 @@ import {
 } from './chatConfig';
 
 export function useAgentChat({
+  initialBranch,
+  useCurrentWorkspaceEvidence,
+  onBranch,
+  workspaceId,
   active = true,
   repositories,
   context,
@@ -39,6 +52,7 @@ export function useAgentChat({
   codexPath = '',
   model = '',
   onSessionTitle,
+  onConversation,
   onModelStatus,
   attachments,
   sharedSanitizer,
@@ -51,14 +65,35 @@ export function useAgentChat({
   const executablePath = mode === 'codex' ? codexPath : claudePath;
   const repoSignature = JSON.stringify(repositories.map((r) => [r.id, r.name, r.path]));
   const { composerAttachments, consumeAttachments } = useComposerAttachments(attachments);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => initialBranch?.messages ?? []);
+  const [displayPrompts, setDisplayPrompts] = useState<Record<number, string>>(
+    initialBranch?.displayPrompts ?? {},
+  );
   const [prompt, setPrompt] = useState('');
   const [stream, setStream] = useState('');
-  const [activities, setActivities] = useState<Record<number, ToolActivity[]>>({});
-  const [evidence, setEvidence] = useState<EvidenceSource[]>([]);
-  const evidenceRef = useRef<EvidenceSource[]>([]);
-  const [responseSources, setResponseSources] = useState<Record<number, EvidenceSource[]>>({});
-  const [reviewBeforeSending, setReviewBeforeSending] = useState(DEFAULT_REVIEW_BEFORE_SENDING);
+  const [activities, setActivities] = useState<Record<number, ToolActivity[]>>(
+    initialBranch?.activities ?? {},
+  );
+  const [evidence, setEvidence] = useState<EvidenceSource[]>(
+    () => initialBranch?.sources.filter((s) => s.kind !== 'artifact') ?? [],
+  );
+  const evidenceRef = useRef<EvidenceSource[]>(
+    initialBranch?.sources.filter((s) => s.kind !== 'artifact') ?? [],
+  );
+  const [responseSources, setResponseSources] = useState<Record<number, EvidenceSource[]>>(
+    initialBranch?.responseSources ?? {},
+  );
+  const [playbookId, setPlaybookId] = useState<PlaybookId | undefined>(initialBranch?.playbookId);
+  const [tasks, setTasks] = useState<InvestigationTask[]>(initialBranch?.tasks ?? []);
+  const tasksRef = useRef(tasks);
+  const checkpoints = useRef(
+    new Map<number, Checkpoint>(
+      Object.entries(initialBranch?.checkpoints ?? {}).map(([key, value]) => [Number(key), value]),
+    ),
+  );
+  const [reviewBeforeSending, setReviewBeforeSending] = useState(
+    initialBranch?.reviewBeforeSending ?? DEFAULT_REVIEW_BEFORE_SENDING,
+  );
   const [authStatus, setAuthStatus] = useState('');
   const [toolApproval, setToolApproval] = useState<ToolApproval | null>(null);
   const [mcpServers, setMcpServers] = useState<McpStatus[]>([]);
@@ -85,7 +120,7 @@ export function useAgentChat({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [reconnectRequired, setReconnectRequired] = useState(false);
-  const sanitizer = useRef(sharedSanitizer ?? new Sanitizer('CHAT'));
+  const sanitizer = useRef(initialBranch?.sanitizer ?? sharedSanitizer ?? new Sanitizer('CHAT'));
   const composer = useRef<HTMLTextAreaElement>(null);
   const { content: conversation, paused: scrollPaused, jumpToLatest } = useChatScroll(active);
   const conversationState = useRef(new CliConversation());
@@ -110,6 +145,7 @@ export function useAgentChat({
     hosted.endpoint,
     hosted.model,
     hosted.token,
+    useCurrentWorkspaceEvidence,
     repoSignature,
     attachments?.busy,
   ]);
@@ -136,7 +172,7 @@ export function useAgentChat({
     // Revoke an in-flight snapshot when selected repos/evidence change, but retain an idle
     // native thread so the next turn can send only the updated evidence.
     abort.current?.abort();
-  }, [context, repoSignature]);
+  }, [context, repoSignature, useCurrentWorkspaceEvidence]);
   const canSend =
     !busy &&
     !reconnectRequired &&
@@ -144,20 +180,101 @@ export function useAgentChat({
     !openingMcpLogin &&
     !attachments?.busy &&
     Boolean(prompt.trim() || composerAttachments?.files.length);
+  function updateTasks(next: InvestigationTask[]) {
+    tasksRef.current = next;
+    setTasks(next);
+  }
+  function selectPlaybook(id: string) {
+    if (inFlight.current || mcpRefreshLock.current || openingMcpLogin) return;
+    const selected = id ? preparePlaybook('', id as PlaybookId, []).playbookId : undefined;
+    setPlaybookId(selected);
+    updateTasks(newTasks(selected));
+    setPending(null);
+  }
+  function changeTask(id: string, status: string) {
+    if (inFlight.current || mcpRefreshLock.current) return;
+    const parsed = taskStatus.safeParse(status);
+    if (!parsed.success) return;
+    updateTasks(
+      tasksRef.current.map((task) =>
+        task.id === id
+          ? { ...task, status: parsed.data, reportedBy: 'user', detail: 'Status confirmed by you.' }
+          : task,
+      ),
+    );
+    setPending(null);
+  }
+  function captureCheckpoint(
+    index: number,
+    snapshot: PendingRequest,
+    nextTasks: InvestigationTask[],
+  ) {
+    checkpoints.current.set(index, {
+      repositoryNames: [...(snapshot.request.repositoryNames ?? [])],
+      context: snapshot.request.context,
+      sources: [...contextEvidence(snapshot.request.context), ...evidenceRef.current],
+      tasks: nextTasks.map((t) => ({ ...t, sources: t.sources?.slice() })),
+      playbookId: snapshot.playbookId,
+      sanitizer: sanitizer.current.fork(),
+    });
+    while (checkpoints.current.size > 100)
+      checkpoints.current.delete(checkpoints.current.keys().next().value!);
+  }
+  function branchAt(index: number) {
+    if (
+      !activeRef.current ||
+      !onBranch ||
+      inFlight.current ||
+      mcpRefreshLock.current ||
+      openingMcpLogin ||
+      pending
+    )
+      return;
+    const checkpoint = checkpoints.current.get(index);
+    if (!checkpoint) {
+      setNotice('That checkpoint is no longer available. The latest 100 are retained.');
+      return;
+    }
+    onBranch({
+      ...branchCheckpoint(
+        messages,
+        index,
+        checkpoint,
+        responseSources,
+        activities,
+        Object.fromEntries(checkpoints.current),
+        displayPrompts,
+      ),
+      reviewBeforeSending,
+    });
+  }
   function sendMessage() {
     if (!canSend || inFlight.current || mcpRefreshLock.current) return;
     try {
       if (mode === 'hosted') hostedProvider(hosted);
       if (mode === 'claude') claudeProvider(claudePath);
       if (mode === 'codex') codexProvider(codexPath);
+      const prepared = preparePlaybook(
+        prompt.trim() || ATTACHED_FILES_PROMPT,
+        playbookId,
+        tasksRef.current,
+      );
       const request: PendingRequest = {
+        displayPrompt: sanitizer.current.text(prompt.trim() || ATTACHED_FILES_PROMPT),
+        playbookId: prepared.playbookId,
+        tasks: prepared.tasks,
         attachmentIds: composerAttachments?.files.map((file) => file.id) ?? [],
         request: prepareRequest(
           messages,
-          prompt.trim() || ATTACHED_FILES_PROMPT,
+          initialBranch
+            ? 'Continue this investigation branch using the new user request below. Do not replay earlier tool calls or remote side effects. Earlier approvals are not inherited; any new tool action needs fresh approval.\n\n' +
+                prepared.prompt
+            : prepared.prompt,
           context,
           sanitizer.current,
-          repositories.map((repository) => repository.name),
+          initialBranch && !useCurrentWorkspaceEvidence
+            ? initialBranch.repositoryNames
+            : repositories.map((repository) => repository.name),
         ),
         config: { ...hosted },
         mode,
@@ -190,6 +307,7 @@ export function useAgentChat({
     try {
       jumpToLatest();
       const tools: ToolHooks = {
+        workspaceId,
         sanitize: (text) => sanitizer.current.sanitize(text, 'json', []),
         status: setMcpServers,
         activity: (item) => {
@@ -234,7 +352,19 @@ export function useAgentChat({
             'Connecting…',
           );
         submitted = true;
+        setPlaybookId(snapshot.playbookId);
+        updateTasks(snapshot.tasks ?? []);
+        captureCheckpoint(turnIndex, snapshot, snapshot.tasks ?? []);
+        setResponseSources((all) => ({
+          ...all,
+          [turnIndex]: [...contextEvidence(snapshot.request.context), ...evidenceRef.current],
+        }));
+        setDisplayPrompts((all) => ({
+          ...all,
+          [turnIndex]: snapshot.displayPrompt ?? snapshot.request.messages[turnIndex].content,
+        }));
         setMessages(snapshot.request.messages);
+        onConversation?.(snapshot.request.messages);
         setPrompt((current) => (current === sentDraft ? '' : current));
         consumeAttachments(snapshot.attachmentIds);
         const reply = await provider.complete(snapshot.request, abort.current.signal, (text) => {
@@ -247,7 +377,19 @@ export function useAgentChat({
           );
         if (mounted.current) {
           const content = sanitizer.current.sanitize(JSON.stringify(parseReply(reply)), 'json', []);
-          const title = parseReply(content).sessionTitle;
+          const parsed = parseReply(content);
+          const nextTasks = applyTaskUpdates(
+            tasksRef.current,
+            parsed.tasks ?? [],
+            new Set(
+              [...contextEvidence(snapshot.request.context), ...evidenceRef.current].map(
+                (s) => s.id,
+              ),
+            ),
+          );
+          updateTasks(nextTasks);
+          captureCheckpoint(snapshot.request.messages.length, snapshot, nextTasks);
+          const title = parsed.sessionTitle;
           if (title && !snapshot.request.messages.some((message) => message.role === 'assistant'))
             onSessionTitle?.(sanitizer.current.restore(title));
           const next: Message[] = [...snapshot.request.messages, { role: 'assistant', content }];
@@ -260,6 +402,7 @@ export function useAgentChat({
             ],
           }));
           setMessages(next);
+          onConversation?.(next);
         }
       } finally {
         clearTimeout(timer);
@@ -417,6 +560,14 @@ export function useAgentChat({
     }
   }
   return {
+    displayPrompts,
+    playbookId,
+    tasks,
+    selectPlaybook,
+    changeTask,
+    branchAt,
+    checkpointIndices: [...checkpoints.current.keys()],
+    canBranch: Boolean(onBranch) && !busy && !refreshingMcp && !openingMcpLogin && !pending,
     agentLabel,
     restoreText: (text: string) => sanitizer.current.restore(text),
     messages,

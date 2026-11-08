@@ -1,3 +1,4 @@
+import { taskUpdateSchema } from './playbooks';
 import { z } from 'zod/v4';
 import { formBlock, codeBlock, jsonBlock } from './widgetSchema';
 
@@ -29,6 +30,12 @@ export const chartItem = z.object({
   value: z.number().finite().nonnegative(),
 });
 export const responseSchema = z.object({
+  tasks: z
+    .array(taskUpdateSchema)
+    .max(12)
+    .refine((tasks) => new Set(tasks.map((t) => t.task)).size === tasks.length)
+    .optional()
+    .catch(undefined),
   text: z.string().max(40000),
   sources: z.array(z.string().min(1).max(100)).max(20).optional(),
   sessionTitle: z.string().trim().min(1).max(60).optional().catch(undefined),

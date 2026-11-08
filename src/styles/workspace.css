@@ -474,7 +474,11 @@ details > p {
 }
 .embedded-safe .tabs {
   flex-wrap: wrap;
-  gap: 18px;
+  gap: var(--space-2);
+}
+.embedded-safe .tabs button {
+  min-height: 42px;
+  padding: var(--space-3) var(--space-4);
 }
 @media (max-width: 850px) {
   .mapping-controls {
@@ -1609,4 +1613,46 @@ details > p {
 }
 .model-picker-compact select {
   max-width: 200px;
+}
+
+.investigation-plan,
+.branch-context {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid #e6e7ed;
+  border-radius: 9px;
+  background: #fff;
+}
+.investigation-plan .field {
+  margin-bottom: var(--space-2);
+}
+.investigation-plan ol {
+  margin: var(--space-3) 0 0;
+  padding-left: 22px;
+}
+.investigation-plan li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid #eeeef3;
+}
+.investigation-plan li > div {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.investigation-plan li small {
+  color: #80768b;
+}
+.investigation-plan select {
+  max-width: 100%;
+}
+.branch-context button,
+.branch-message {
+  margin-top: var(--space-2);
+  padding: 8px 12px;
+  font-size: 12px;
 }

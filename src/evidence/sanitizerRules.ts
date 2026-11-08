@@ -1,5 +1,5 @@
 export const SENSITIVE_FIELD =
-  /^(password|passwd|secret|token|access_token|refresh_token|api[_-]?key|authorization|cookie|email|phone|ssn|name|full_name|address|ip|user_id)$/i;
+  /^(password|passwd|secret|token|access_token|refresh_token|api[_-]?key|authorization|cookie|set-cookie|x-api-key|x-auth-token|email|phone|ssn|name|full_name|address|ip|user_id)$/i;
 // Match identifier fields without treating words such as "valid" or "grid" as IDs.
 export const IDENTIFIER_FIELD = /(?:^|_)id$/i;
 // Authorization decisions are public outcomes, not Authorization credentials.
@@ -19,3 +19,8 @@ export const SOCIAL_SECURITY_NUMBER = /\b\d{3}-\d{2}-\d{4}\b/g;
 export const PLACEHOLDER = /^\[[A-Z_]+_\d+\]$/;
 export const PLACEHOLDER_SEGMENTS = /(\[[A-Z_]+_\d+\])/g;
 export const PLACEHOLDER_OCCURRENCES = /\[[A-Z_]+_\d+\]/g;
+
+// Quoted JSON fields inside otherwise unstructured prompts and log messages.
+export const QUOTED_SECRET =
+  /("(?:password|passwd|secret|token|access_token|refresh_token|api[_-]?key|authorization|cookie|set-cookie|x-api-key|x-auth-token)"\s*:\s*)"((?:\\.|[^"\\])*)"/gi;
+export const URL_CREDENTIALS = /\b(https?:\/\/)([^\s/@]+)@/gi;

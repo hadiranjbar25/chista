@@ -1,3 +1,4 @@
+import type { InvestigationBranch } from '../chat/checkpoints';
 import { useEffect, useRef, useState } from 'react';
 import { Cpu, Settings } from 'lucide-react';
 import AppSidebar from './AppSidebar';
@@ -20,10 +21,14 @@ import {
   type ChatAttachments,
 } from './workspaces/workspace';
 import WorkspaceSettings from './workspaces/WorkspaceSettings';
+import WorkspaceSecurity from './workspaces/WorkspaceSecurity';
 import '../styles/workspace.css';
 type Route = 'Workspace config' | 'Sessions' | 'Artifacts' | 'Settings';
 export default function App() {
   const workspaceSanitizers = useRef(new Map<string, Sanitizer>());
+  const [savedConversations, setSavedConversations] = useState<
+    Record<string, import('../integrations/providers').Message[]>
+  >({});
   const [toolEvidence, setToolEvidence] = useState<Record<string, EvidenceSource[]>>({});
   function sanitizerFor(id: string) {
     let value = workspaceSanitizers.current.get(id);
@@ -33,6 +38,9 @@ export default function App() {
     }
     return value;
   }
+  const branchMappings = useRef(
+    new Map<string, Map<string, import('../evidence/safety').RedactionMapping>>(),
+  );
   const filePickers = useRef(new Map<string, SafeSessionHandle>());
   const [notice, setNotice] = useState('');
   const {
@@ -50,10 +58,16 @@ export default function App() {
     workspaces.map((w) => newSession('Debug session 1', w.id)),
   );
 
+  const [branches, setBranches] = useState<Record<string, InvestigationBranch>>({});
+  const [currentEvidenceBranches, setCurrentEvidenceBranches] = useState<Record<string, boolean>>(
+    {},
+  );
   const [sessionId, setSessionId] = useState(() => sessions[0].id);
   const [route, setRoute] = useState<Route>('Sessions');
   const [sessionTab, setSessionTab] = useState<'safe' | 'chat'>('chat');
-  const [settingsPage, setSettingsPage] = useState<'General' | 'Models'>('General');
+  const [settingsPage, setSettingsPage] = useState<
+    'Data & privacy' | 'Models' | 'Workspace security'
+  >('Models');
   useEffect(
     () => exitSectionFullscreen(),
     [route, sessionId, workspaceId, sessionTab, settingsPage],
@@ -111,6 +125,16 @@ export default function App() {
     setSessions((all) => {
       const kept = all.filter((item) => item.id !== sessionId);
       return remaining.length ? kept : [...kept, next];
+    });
+    setSavedConversations((all) => {
+      const next = { ...all };
+      delete next[sessionId];
+      return next;
+    });
+    setBranches((all) => {
+      const next = { ...all };
+      delete next[sessionId];
+      return next;
     });
     setSessionId(next.id);
     setSessionTab('chat');
@@ -210,6 +234,11 @@ export default function App() {
             >
               <FullscreenSection title="Files & mappings">
                 <SafeSession
+                  workspaceId={w.id}
+                  extraMappings={[...(branchMappings.current.get(w.id)?.values() ?? [])]}
+                  conversations={sessions
+                    .filter((s) => s.workspaceId === w.id)
+                    .map((s) => savedConversations[s.id] ?? [])}
                   sharedSanitizer={sanitizerFor(w.id)}
                   extraEvidence={toolEvidence[w.id] ?? []}
                   ref={(handle) => {
@@ -243,10 +272,43 @@ export default function App() {
               <div key={s.id} hidden={!active || route !== 'Sessions' || sessionTab !== 'chat'}>
                 <FullscreenSection title="Agent chat" className="focus-chat">
                   <AgentChat
-                    sharedSanitizer={sanitizerFor(w.id)}
-                    onEvidence={(source) =>
-                      setToolEvidence((all) => ({ ...all, [w.id]: [...(all[w.id] ?? []), source] }))
+                    workspaceId={w.id}
+                    initialBranch={branches[s.id]}
+                    useCurrentWorkspaceEvidence={currentEvidenceBranches[s.id]}
+                    onUseWorkspaceEvidence={
+                      branches[s.id] && !currentEvidenceBranches[s.id]
+                        ? () => setCurrentEvidenceBranches((all) => ({ ...all, [s.id]: true }))
+                        : undefined
                     }
+                    onBranch={(branch) => {
+                      const created = newSession(`${s.name.slice(0, 45)} · branch`, w.id);
+                      setBranches((all) => ({ ...all, [created.id]: branch }));
+                      setSavedConversations((all) => ({ ...all, [created.id]: branch.messages }));
+                      setSessions((all) => [...all, created]);
+                      setWorkspaceId(w.id);
+                      setSessionId(created.id);
+                      setSessionTab('chat');
+                      setRoute('Sessions');
+                    }}
+                    onConversation={(messages) =>
+                      setSavedConversations((all) => ({ ...all, [s.id]: messages }))
+                    }
+                    sharedSanitizer={sanitizerFor(w.id)}
+                    onEvidence={(source) => {
+                      if (branches[s.id]) {
+                        let mappings = branchMappings.current.get(w.id);
+                        if (!mappings) {
+                          mappings = new Map();
+                          branchMappings.current.set(w.id, mappings);
+                        }
+                        for (const mapping of branches[s.id].sanitizer.mappings())
+                          mappings.set(mapping.placeholder, mapping);
+                      }
+                      setToolEvidence((all) => ({
+                        ...all,
+                        [w.id]: [...(all[w.id] ?? []), source],
+                      }));
+                    }}
                     onSessionTitle={(name) =>
                       setSessions((all) =>
                         all.map((item) =>
@@ -255,14 +317,26 @@ export default function App() {
                       )
                     }
                     active={active && route === 'Sessions' && sessionTab === 'chat'}
-                    onAddFiles={() => filePickers.current.get(w.id)?.openFilePicker()}
+                    onAddFiles={() => {
+                      if (branches[s.id] && !currentEvidenceBranches[s.id])
+                        setCurrentEvidenceBranches((all) => ({ ...all, [s.id]: true }));
+                      filePickers.current.get(w.id)?.openFilePicker();
+                    }}
                     onFiles={() => {
                       setRoute('Sessions');
                       setSessionTab('safe');
                     }}
                     repositories={included}
-                    context={attachments[w.id]?.context ?? contexts[w.id] ?? null}
-                    attachments={attachments[w.id]}
+                    context={
+                      branches[s.id] && !currentEvidenceBranches[s.id]
+                        ? branches[s.id].context
+                        : (attachments[w.id]?.context ?? contexts[w.id] ?? null)
+                    }
+                    attachments={
+                      branches[s.id] && !currentEvidenceBranches[s.id]
+                        ? undefined
+                        : attachments[w.id]
+                    }
                     onRemoveAttachment={(id) => filePickers.current.get(w.id)?.removeAttachment(id)}
                     mode={mode}
                     hosted={hosted}
@@ -287,8 +361,9 @@ export default function App() {
             <nav className="session-tabs" aria-label="Settings sections">
               {(
                 [
-                  { name: 'General', icon: Settings },
                   { name: 'Models', icon: Cpu },
+                  { name: 'Workspace security', icon: Settings },
+                  { name: 'Data & privacy', icon: Settings },
                 ] as const
               ).map(({ name, icon: Icon }) => (
                 <button
@@ -310,7 +385,18 @@ export default function App() {
           {route === 'Settings' && settingsPage === 'Models' && (
             <ModelSettings settings={agentSettings} />
           )}
-          {route === 'Settings' && settingsPage === 'General' && (
+          {route === 'Settings' && settingsPage === 'Workspace security' && (
+            <>
+              <div className="page-heading">
+                <div className="view-title">
+                  <h1>Workspace security</h1>
+                  <p>Permissions for {workspace.name}.</p>
+                </div>
+              </div>
+              <WorkspaceSecurity key={workspace.id} workspaceId={workspace.id} />
+            </>
+          )}
+          {route === 'Settings' && settingsPage === 'Data & privacy' && (
             <GeneralSettings setNotice={setNotice} />
           )}
         </div>

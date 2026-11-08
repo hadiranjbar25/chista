@@ -1,3 +1,4 @@
+import InvestigationPlan from './InvestigationPlan';
 import { useAgentChat } from './useAgentChat';
 import type { AgentChatProps } from './chatTypes';
 import ChatMessages from './ChatMessages';
@@ -21,6 +22,27 @@ export default function AgentChat(props: AgentChatProps) {
         refreshMcp={chat.refreshMcp}
         signInMcp={chat.signInMcp}
       />
+      {props.initialBranch && (
+        <aside className="branch-context" aria-label="Branch checkpoint">
+          <p>
+            Branched through message {props.initialBranch.messageIndex + 1}. The original session is
+            preserved. External API or MCP actions are not undone.
+          </p>
+          {props.onUseWorkspaceEvidence ? (
+            <>
+              <p>
+                This branch uses the evidence and redaction settings captured at that checkpoint.
+              </p>
+              <button onClick={props.onUseWorkspaceEvidence} disabled={chat.busy}>
+                Use current workspace evidence
+              </button>
+            </>
+          ) : (
+            <p>Using current workspace evidence with this branch's redaction settings.</p>
+          )}
+        </aside>
+      )}
+      <InvestigationPlan chat={chat} />
       <ChatMessages chat={chat} />
       <ChatComposer {...props} chat={chat} />
       {chat.toolApproval && (

@@ -55,8 +55,60 @@ jobs:
           toolchain: stable
           targets: ${{ matrix.targets }}
       - run: npm ci --ignore-scripts
-      - name: Build installer
+      - name: Import macOS signing certificate
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash .github/scripts/import-macos-signing.sh
+      - name: Import Windows signing certificate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: ./.github/scripts/import-windows-signing.ps1
+      - name: Test native protections
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Build signed and notarized macOS installer
+        if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run tauri build -- ${{ matrix.args }}
+      - name: Build signed Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: npm run tauri build -- ${{ matrix.args }} --config "$env:RUNNER_TEMP/chista-signing.json"
+      - name: Verify macOS signature and notarization
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          codesign --verify --deep --strict src-tauri/target/universal-apple-darwin/release/bundle/macos/Chista.app
+          xcrun stapler validate src-tauri/target/universal-apple-darwin/release/bundle/macos/Chista.app
+      - name: Verify Windows installer signature
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if ((Get-AuthenticodeSignature $installer.FullName).Status -ne 'Valid') { throw 'Installer signature is invalid.' }
+      - name: Remove macOS signing material
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: security delete-keychain "$RUNNER_TEMP/chista-signing.keychain-db" || true
+      - name: Remove Windows signing material
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:CHISTA_SIGNING_THUMBPRINT) { Remove-Item "Cert:\CurrentUser\My\$env:CHISTA_SIGNING_THUMBPRINT" -Force }
+          Remove-Item "$env:RUNNER_TEMP/chista-signing.json" -Force -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.artifact }}

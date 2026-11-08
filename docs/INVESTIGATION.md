@@ -55,3 +55,19 @@ cargo test --manifest-path src-tauri/Cargo.toml
 The connector smoke check starts its own loopback fixture, uses the installed Codex CLI for MCP discovery and calls, disables inherited servers for its temporary thread, and leaves global CLI configuration unchanged. It runs no AI inference. Automated UI tests simulate agent replies; production Datadog access and model behavior still require a live configured session.
 
 The fixture implements JSON responses over [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports). It binds to loopback and rejects browser origins.
+
+## Debugging playbooks and task tracking
+
+Choose a Debugging playbook above the chat, or start a message with `/investigate-error`, `/compare-traces`, or `/incident-report`. These are registered Chista workflows for error diagnosis, comparing traces and drafting incident reports. Selecting a playbook makes no model request and runs no commands. Sending includes the procedure and current checklist in the sanitized prompt. Enable Review before sending to inspect the exact expanded request. Unknown slash commands are rejected locally; Chista does not load arbitrary native skills, plugins or scripts.
+
+The checklist shows Pending, In progress, Completed and Blocked checks. Agents may report updates only for the registered steps. A completion report without an available supporting source becomes Blocked. A matching source reference does not independently prove the agent's conclusion: entries are labelled Agent-reported and can be reviewed or confirmed manually. Changing a checklist status or playbook revokes an outstanding request preview. The task list never grants tool permissions or executes actions; the existing per-call MCP/API approvals still apply.
+
+## Branching from message checkpoints
+
+After a submitted message, use Branch from here to create a separate debug session in the same workspace. Up to the latest 100 message checkpoints are retained per session in memory. The new session keeps only the chosen conversation prefix, the sanitized evidence/context available at that point, its checklist/playbook, and a separate copy of its redaction settings and local mappings. Later messages, later tool activity and pending approvals are excluded. The original session stays available in the sidebar.
+
+A branch starts a fresh native conversation when you send its next message. It inherits the review-before-sending preference, but no native thread or one-call tool approval. Its next request explicitly tells the agent not to replay earlier actions. All actions still require the current workspace permissions and fresh tool approvals. Branching makes no model/tool call by itself and cannot undo changes already made by HTTP or MCP tools.
+
+Checkpoint evidence is frozen by default. Use current workspace evidence opts a branch into the workspace's latest reviewed context. Adding files to a branch also opts it into current workspace evidence. Its captured redaction settings stay independent, so changes to the original workspace profile do not silently change an existing branch.
+
+Live checklist and checkpoint state remains in memory. Encrypted investigation bundles include bounded sanitized chat excerpts, including agent task reports, but do not restore live native connections or the checkpoint registry. Raw reversal mappings and private profile values are not included in shared bundles.

@@ -6,6 +6,9 @@ import type { NativeTurn } from '../integrations/conversation';
 import type { HostedConfig, ModelRequest } from '../integrations/providers';
 
 export type PendingRequest = {
+  displayPrompt?: string;
+  playbookId?: import('./playbooks').PlaybookId;
+  tasks?: import('./playbooks').InvestigationTask[];
   attachmentIds: string[];
   request: ModelRequest;
   config: HostedConfig;
@@ -14,6 +17,12 @@ export type PendingRequest = {
   turn?: NativeTurn;
 };
 export type AgentChatProps = {
+  useCurrentWorkspaceEvidence?: boolean;
+  initialBranch?: import('./checkpoints').InvestigationBranch;
+  onBranch?: (branch: import('./checkpoints').InvestigationBranch) => void;
+  onUseWorkspaceEvidence?: () => void;
+  onConversation?: (messages: import('../integrations/providers').Message[]) => void;
+  workspaceId?: string;
   model?: string;
   modelCatalog?: ModelCatalog;
   onModelChange?: (model: string) => void;

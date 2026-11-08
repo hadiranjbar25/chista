@@ -23,6 +23,8 @@ pub async fn refresh_agent_mcp(
         .and_then(|key| sessions.0.lock().unwrap().get(key).cloned());
     tauri::async_runtime::spawn_blocking(move || {
         let cancelled = AtomicBool::new(false);
+        crate::security::agent(&agent);
+        crate::security::enter(entry.as_ref().map(|e| e.policy.clone()).unwrap_or_default());
         if let Some(entry) = entry {
             if entry.agent != agent || entry.binary != binary {
                 return Err("Agent settings changed. Refresh connections again.".into());
@@ -291,6 +293,10 @@ for line in sys.stdin:
 
     #[test]
     fn reconnects_after_auth_without_replaying_chat_and_new_codex_tools_remain_reviewed() {
+        crate::security::enter(crate::security::Policy {
+            origins: vec![],
+            servers: vec!["codex:fixture".into(), "claude:fixture".into()],
+        });
         for agent in ["claude", "codex"] {
             let (_dir, binary) = fixture(agent);
             let cancelled = AtomicBool::new(false);

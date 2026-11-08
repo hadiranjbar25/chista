@@ -93,7 +93,7 @@ export default function ModelSettings({ settings }: { settings: AgentSettings })
               <p className="muted">
                 Sign-in opens automatically when needed. Supports MCP tools and HTTP API requests,
                 with approval before each call and sanitized results. MCP servers come from the
-                CLI’s user configuration; chat shows connection status and a Sign in button.
+                CLI’s user configuration and must be explicitly approved in Workspace configuration.
               </p>
             </div>
           </details>
@@ -125,7 +125,7 @@ export default function ModelSettings({ settings }: { settings: AgentSettings })
               <p className="muted">
                 Sign-in opens automatically when needed. Supports MCP tools and HTTP API requests,
                 with approval before each call and sanitized results. MCP servers come from the
-                CLI’s user configuration; chat shows connection status and a Sign in button.
+                CLI’s user configuration and must be explicitly approved in Workspace configuration.
               </p>
             </div>
           </details>
@@ -139,7 +139,9 @@ export default function ModelSettings({ settings }: { settings: AgentSettings })
               {mode === 'hosted' && <span className="pill">Active</span>}
             </summary>
             <div className="agent-setting-body">
-              <p className="muted">Configuration and API token stay in memory for this app run.</p>
+              <p className="muted">
+                API tokens are saved in the OS credential store. Endpoint and model stay in memory.
+              </p>
               <label className="field">
                 HTTPS endpoint
                 <input

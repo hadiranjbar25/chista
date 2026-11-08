@@ -1,3 +1,4 @@
+import InvestigationLibrary from './InvestigationLibrary';
 import { X } from 'lucide-react';
 import { useEvidenceSession } from './useEvidenceSession';
 import type { SafeSessionProps } from './evidenceTypes';
@@ -51,7 +52,13 @@ export default function SafeSession(props: SafeSessionProps) {
           {tab === 'Compare artifacts' && <ArtifactComparison evidence={evidence} />}
           {tab === 'Mappings' && (
             <RedactionMappings
-              mappings={evidence.sanitizer.current.mappings()}
+              mappings={[
+                ...new Map(
+                  [...evidence.sanitizer.current.mappings(), ...(props.extraMappings ?? [])].map(
+                    (mapping) => [mapping.placeholder, mapping],
+                  ),
+                ).values(),
+              ]}
               files={[
                 ...files,
                 ...extraEvidence.map((source) => ({
@@ -84,6 +91,12 @@ export default function SafeSession(props: SafeSessionProps) {
             </FullscreenSection>
           )}
 
+          <InvestigationLibrary
+            evidence={evidence}
+            conversations={props.conversations}
+            sources={extraEvidence}
+            workspaceId={props.workspaceId}
+          />
           <ContextExport
             selectedCount={evidence.selected.length}
             prepareContext={evidence.prepareContext}

@@ -1,14 +1,17 @@
 mod claude;
 mod claude_settings;
 mod codex_stream;
+mod credentials;
 mod persistent;
 mod repositories;
+mod security;
 use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(security::Policies::default())
         .manage(claude::ChatProcesses::default())
         .manage(persistent::Sessions::default())
         .manage(persistent::mcp::Approvals::default())
@@ -23,6 +26,13 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            security::read_audit_history,
+            security::read_workspace_security,
+            security::configure_workspace_security,
+            security::preview_mcp_configuration,
+            credentials::store_credential,
+            credentials::read_credential,
+            credentials::delete_credential,
             repositories::select_repository_folder,
             persistent::mcp::respond_agent_tool,
             persistent::models::agent_models,

@@ -64,7 +64,18 @@ export default function ChatMessages({ chat }: { chat: ChatController }) {
                 }}
               />
             ) : (
-              <p>{m.content}</p>
+              <p>{chat.displayPrompts[i] ?? m.content}</p>
+            )}
+            {chat.checkpointIndices.includes(i) && (
+              <button
+                type="button"
+                className="branch-message"
+                disabled={!chat.canBranch}
+                onClick={() => chat.branchAt(i)}
+                aria-label={`Branch from message ${i + 1}`}
+              >
+                Branch from here
+              </button>
             )}
           </article>
           <InvestigationProgress activities={activities[i] ?? []} evidence={sources} />

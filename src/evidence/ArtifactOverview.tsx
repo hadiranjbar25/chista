@@ -42,8 +42,12 @@ export default function ArtifactOverview({ evidence }: { evidence: EvidenceContr
               <span>
                 or <em>browse files</em> to start investigating
               </span>
-              <small>CSV, TSV, JSON, LOG, TXT · up to 2 MB per file</small>
+              <small>CSV, TSV, JSON, JSONL, NDJSON, LOG, TXT · up to 2 MB per file</small>
             </button>
+            <p className="muted">
+              Sentry event JSON and OpenTelemetry JSON exports are sanitized locally before context
+              is prepared.
+            </p>
             {files.length ? (
               <div className="artifact-list">
                 {files.map((f) => (

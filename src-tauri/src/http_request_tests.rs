@@ -6,6 +6,10 @@ fn executes_a_real_request_and_treats_at_body_as_literal_text() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let address = listener.local_addr().unwrap();
+    crate::security::enter(crate::security::Policy {
+        origins: vec![format!("http://{address}")],
+        servers: vec![],
+    });
     let server = std::thread::spawn(move || {
         let start = Instant::now();
         let mut socket = loop {
@@ -64,6 +68,10 @@ fn stops_an_in_flight_request() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let address = listener.local_addr().unwrap();
+    crate::security::enter(crate::security::Policy {
+        origins: vec![format!("http://{address}")],
+        servers: vec![],
+    });
     let cancelled = std::sync::Arc::new(AtomicBool::new(false));
     let signal = cancelled.clone();
     let server = std::thread::spawn(move || {
@@ -93,6 +101,10 @@ fn rejects_oversized_responses() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let address = listener.local_addr().unwrap();
+    crate::security::enter(crate::security::Policy {
+        origins: vec![format!("http://{address}")],
+        servers: vec![],
+    });
     let server = std::thread::spawn(move || {
         let start = Instant::now();
         let mut socket = loop {
@@ -129,4 +141,70 @@ fn rejects_oversized_responses() {
         "Unexpected size-limit error: {error}"
     );
     server.join().unwrap();
+}
+
+#[test]
+fn blocks_non_public_addresses_including_mapped_and_metadata() {
+    for address in [
+        "127.0.0.1",
+        "10.0.0.1",
+        "169.254.169.254",
+        "100.100.100.200",
+        "172.16.0.1",
+        "192.168.1.1",
+        "0.0.0.0",
+        "::1",
+        "::ffff:127.0.0.1",
+        "fe80::1",
+        "fc00::1",
+        "2002:7f00:1::",
+    ] {
+        assert!(!public_ip(address.parse().unwrap()), "{address}");
+    }
+    assert!(public_ip("8.8.8.8".parse().unwrap()));
+    crate::security::enter(crate::security::Policy::default());
+    assert!(destination(&tauri::Url::parse("http://127.0.0.1").unwrap()).is_err());
+}
+
+#[test]
+fn never_follows_redirects_even_to_approved_local_origins() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    crate::security::enter(crate::security::Policy {
+        origins: vec![format!("http://{address}")],
+        servers: vec![],
+    });
+    let server = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        let mut buffer = [0; 4096];
+        let _ = socket.read(&mut buffer);
+        socket.write_all(b"HTTP/1.1 302 Found\r\nLocation: http://169.254.169.254/latest/meta-data\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+    });
+    assert!(execute(
+        &json!({"url":format!("http://{address}")}),
+        &AtomicBool::new(false),
+        &AtomicBool::new(false)
+    )
+    .unwrap_err()
+    .contains("redirects"));
+    server.join().unwrap();
+}
+
+#[test]
+fn rejects_host_overrides_hop_by_hop_headers_and_aggregate_header_overflow() {
+    for header in [
+        "Host",
+        "Content-Length",
+        "Transfer-Encoding",
+        "Proxy-Authorization",
+        "Connection",
+    ] {
+        assert!(
+            validate(&json!({"url":"https://example.com","headers":{header:"value"}})).is_err()
+        );
+    }
+    assert!(validate(
+        &json!({"url":"https://example.com","headers":{"A":"a".repeat(8192),"B":"b".repeat(8192)}})
+    )
+    .is_err());
 }

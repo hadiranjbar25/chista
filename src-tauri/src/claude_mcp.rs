@@ -40,6 +40,23 @@ fn write_config(source: &std::path::Path, directory: &std::path::Path) -> Result
     if servers.get(claude_tools::SERVER).is_some() {
         return Err("The MCP server name chista_internal is reserved for Chista tools.".into());
     }
+    servers
+        .as_object_mut()
+        .unwrap()
+        .retain(|name, config| crate::security::configuration_allowed(name, config));
+    for (name, config) in servers.as_object_mut().unwrap().iter_mut() {
+        let secrets = crate::security::connector_secrets(name)?;
+        for (from, to) in [("env", "env"), ("http_headers", "headers")] {
+            if let Some(values) = secrets[from].as_object() {
+                if !config[to].is_object() {
+                    config[to] = json!({});
+                }
+                for (key, value) in values {
+                    config[to][key] = value.clone();
+                }
+            }
+        }
+    }
     servers[claude_tools::SERVER] = json!({"type":"sdk","name":claude_tools::SERVER});
     let target = directory.join("claude-mcp.json");
     let mut options = std::fs::OpenOptions::new();
@@ -382,7 +399,7 @@ mod tests {
 import json,sys
 scenario=SCENARIO
 args=sys.argv[1:]
-assert '--safe-mode' not in args and '--strict-mcp-config' not in args
+assert '--safe-mode' not in args and '--strict-mcp-config' in args
 assert json.load(open(args[args.index('--mcp-config')+1])).get('mcpServers') is not None
 assert args[args.index('--tools')+1]=='ToolSearch,WaitForMcpServers'
 assert args[args.index('--setting-sources')+1]==''
@@ -541,6 +558,10 @@ sys.stdin.read()
 
     #[test]
     fn copies_only_mcp_definitions_into_a_private_session_file() {
+        crate::security::enter(crate::security::Policy {
+            origins: vec![],
+            servers: vec!["fixture".into()],
+        });
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("user.json");
         let session = tempfile::tempdir().unwrap();

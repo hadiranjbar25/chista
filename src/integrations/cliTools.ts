@@ -3,6 +3,7 @@ import type { EvidenceSource, ToolActivity } from '../evidence/investigation';
 export type McpStatus = { name: string; authStatus: string; available: boolean; failed: boolean };
 export type ToolApproval = { server: string; tool: string; arguments: unknown; kind?: 'http' };
 export type ToolHooks = {
+  workspaceId?: string;
   approve: (tool: ToolApproval) => Promise<boolean>;
   sanitize: (text: string) => string;
   status: (servers: McpStatus[]) => void;

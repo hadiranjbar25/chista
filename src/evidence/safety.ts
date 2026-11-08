@@ -1,4 +1,6 @@
 import {
+  QUOTED_SECRET,
+  URL_CREDENTIALS,
   SENSITIVE_FIELD,
   IDENTIFIER_FIELD,
   AUTHORIZATION_DECISION,
@@ -27,6 +29,17 @@ export type Artifact = {
 export type RedactionMapping = { original: string; placeholder: string };
 export class Sanitizer {
   constructor(private namespace = '') {}
+  private terms: string[] = [];
+  setTerms(terms: string[]) {
+    this.terms = terms.filter(Boolean);
+  }
+  fork(namespace = this.namespace): Sanitizer {
+    const copy = new Sanitizer(namespace);
+    copy.terms = [...this.terms];
+    copy.values = new Map(this.values);
+    copy.counts = new Map(this.counts);
+    return copy;
+  }
   private values = new Map<string, string>();
   private counts = new Map<string, number>();
   // Copies for local inspection only. Never include these entries in an outbound payload.
@@ -53,9 +66,29 @@ export class Sanitizer {
     return replacement;
   }
   text(input: string, terms: string[] = []) {
+    terms = [...this.terms, ...terms];
     let text = input;
     for (const term of terms.filter(Boolean).sort((a, b) => b.length - a.length))
       text = text.split(term).join(this.placeholder(term, 'CUSTOM'));
+    text = text.replace(QUOTED_SECRET, (match, prefix: string, escaped: string) => {
+      let value: string;
+      try {
+        value = JSON.parse(`"${escaped}"`) as string;
+      } catch {
+        return match;
+      }
+      if (
+        PLACEHOLDER.test(value) ||
+        (/authorization/i.test(prefix) && AUTHORIZATION_DECISION.test(value))
+      )
+        return match;
+      return prefix + JSON.stringify(this.placeholder(value, 'SECRET'));
+    });
+    text = text.replace(
+      URL_CREDENTIALS,
+      (_, scheme: string, credentials: string) =>
+        scheme + this.placeholder(credentials, 'SECRET') + '@',
+    );
     text = text.replace(PRIVATE_KEY, (v) => this.placeholder(v, 'SECRET'));
     text = text.replace(BEARER_TOKEN, (_, v: string) => `Bearer ${this.placeholder(v, 'SECRET')}`);
     text = text.replace(SENSITIVE_ASSIGNMENT, (match, key: string, sep: string, v: string) =>
@@ -108,10 +141,25 @@ export class Sanitizer {
     const visit = (value: unknown, key = ''): unknown => {
       if (value === null) return value;
       if (Array.isArray(value)) return value.map((v) => visit(v, key));
-      if (typeof value === 'object')
+      if (typeof value === 'object') {
+        // OpenTelemetry attributes encode the sensitive field name as data.
+        const attribute = value as Record<string, unknown>;
+        if (
+          typeof attribute.key === 'string' &&
+          'value' in attribute &&
+          /(?:^|[._-])(token|secret|password|authorization|cookie|api[_-]?key|email|phone|ssn|ip|address|name|id|user[_-]?id)(?:$|[._-])/i.test(
+            attribute.key,
+          )
+        ) {
+          return {
+            key: this.text(attribute.key, terms),
+            value: this.placeholder(JSON.stringify(attribute.value), 'SENSITIVE'),
+          };
+        }
         return Object.fromEntries(
           Object.entries(value).map(([k, v]) => [this.text(k, terms), visit(v, k)]),
         );
+      }
       if (
         key.toLowerCase() === 'authorization' &&
         typeof value === 'string' &&

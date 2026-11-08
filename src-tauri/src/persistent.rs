@@ -34,6 +34,8 @@ pub mod refresh;
 pub struct Sessions(Arc<Mutex<HashMap<String, Arc<Entry>>>>);
 struct Entry {
     agent: String,
+    workspace_id: String,
+    policy: crate::security::Policy,
     binary: PathBuf,
     closed: AtomicBool,
     session: Mutex<Option<Session>>,
@@ -70,6 +72,8 @@ pub async fn agent_session_chat(
     agent: String,
     executable_path: String,
     model: Option<String>,
+    workspace_id: Option<String>,
+    policies: tauri::State<'_, crate::security::Policies>,
     system_prompt: Option<String>,
     payload: String,
     on_event: Channel<Value>,
@@ -89,11 +93,23 @@ pub async fn agent_session_chat(
     let model = model.unwrap_or_default().trim().to_string();
     models::validate_model(&model)?;
     let binary = resolve_cli(&executable_path, &agent)?;
+    let workspace_id = workspace_id.unwrap_or_default();
+    let policy = policies
+        .0
+        .lock()
+        .map_err(|_| "Policy unavailable.")?
+        .get(&workspace_id)
+        .cloned()
+        .unwrap_or_default();
     let sessions = sessions.inner().clone();
     let entry = {
         let mut entries = sessions.0.lock().unwrap();
         if let Some(entry) = entries.get(&session_key) {
-            if entry.agent != agent || entry.binary != binary || system_prompt.is_some() {
+            if entry.workspace_id != workspace_id
+                || entry.agent != agent
+                || entry.binary != binary
+                || system_prompt.is_some()
+            {
                 return Err(
                     "Session configuration changed. Send again to start a fresh session.".into(),
                 );
@@ -112,6 +128,8 @@ pub async fn agent_session_chat(
             }
             let entry = Arc::new(Entry {
                 agent: agent.clone(),
+                workspace_id: workspace_id.clone(),
+                policy: policy.clone(),
                 binary: binary.clone(),
                 closed: AtomicBool::new(false),
                 session: Mutex::new(None),
@@ -134,6 +152,10 @@ pub async fn agent_session_chat(
         requests.insert(request_id.clone(), cancelled.clone());
     }
     tauri::async_runtime::spawn_blocking(move || {
+        crate::security::enter(policy);
+        crate::security::scope(&workspace_id);
+        crate::security::agent(&agent);
+        crate::security::audit("agent", "started");
         let mut session = match entry.session.try_lock() {
             Ok(session) => session,
             Err(_) => {
@@ -213,6 +235,7 @@ pub async fn agent_session_chat(
             *session = None;
         }
         drop(session);
+        crate::security::audit("agent", if result.is_ok() { "completed" } else { "failed-or-cancelled" });
         processes.0.lock().unwrap().remove(&request_id);
         if result.is_err() && !retained {
             sessions.close(&session_key);
@@ -375,6 +398,7 @@ impl Session {
         cancelled: &AtomicBool,
         closed: &AtomicBool,
     ) -> Result<Self, String> {
+        crate::security::agent(agent);
         let directory =
             tempfile::tempdir().map_err(|_| "Cannot create isolated agent directory.")?;
         let mut command = Command::new(binary);
@@ -404,7 +428,10 @@ impl Session {
             let config = claude_mcp::config_file(directory.path())?;
             // Keep native account/company connector discovery. Strict mode
             // suppresses those connectors, even when the CLI can use them.
-            command.arg("--mcp-config").arg(config);
+            command
+                .arg("--strict-mcp-config")
+                .arg("--mcp-config")
+                .arg(config);
             command.env_remove("CLAUDE_CODE_SAFE_MODE");
             let pipe = Pipe::spawn(&mut command)?;
             claude_mcp::initialize(&pipe, cancelled, closed)?;
@@ -961,6 +988,8 @@ for line in sys.stdin:
             "session".into(),
             Arc::new(Entry {
                 agent: "claude".into(),
+                workspace_id: String::new(),
+                policy: crate::security::Policy::default(),
                 binary,
                 closed: AtomicBool::new(false),
                 session: Mutex::new(Some(first)),
@@ -1009,6 +1038,8 @@ mod shutdown_tests {
         let sessions = Sessions::default();
         let entry = Arc::new(Entry {
             agent: "claude".into(),
+            workspace_id: String::new(),
+            policy: crate::security::Policy::default(),
             binary: PathBuf::new(),
             closed: AtomicBool::new(false),
             session: Mutex::new(None),

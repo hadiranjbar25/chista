@@ -1,3 +1,4 @@
+import WorkspaceSecurity from './WorkspaceSecurity';
 import { FolderOpen } from 'lucide-react';
 import FullscreenSection from '../../components/FullscreenSection';
 import type { Repository, Workspace } from './workspace';
@@ -32,6 +33,7 @@ export default function WorkspaceSettings({
           </p>
         </div>
       </div>
+      <WorkspaceSecurity key={workspace.id} workspaceId={workspace.id} />
       <div className="management-grid">
         <FullscreenSection title="Workspace repositories" className="focus-panel">
           <section className="panel">

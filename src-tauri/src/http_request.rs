@@ -6,12 +6,72 @@ use std::{
     time::{Duration, Instant},
 };
 
+use std::net::{IpAddr, ToSocketAddrs};
+
+const MAX_HEADER_BYTES: u64 = 16_384;
 const MAX_RESPONSE_BYTES: usize = 1_000_000;
 const TIMEOUT: Duration = Duration::from_secs(35);
 
 #[cfg(test)]
 #[path = "http_request_tests.rs"]
 mod integration_tests;
+
+// Conservative public-address policy, including IPv4-mapped IPv6 and special ranges.
+fn public_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let [a, b, c, _] = ip.octets();
+            !(a == 0
+                || a == 10
+                || a == 127
+                || a >= 224
+                || (a == 100 && (64..=127).contains(&b))
+                || (a == 169 && b == 254)
+                || (a == 172 && (16..=31).contains(&b))
+                || (a == 192 && (b == 168 || b == 0 || (b == 88 && c == 99)))
+                || (a == 198 && (b == 18 || b == 19 || (b == 51 && c == 100)))
+                || (a == 203 && b == 0 && c == 113))
+        }
+        IpAddr::V6(ip) => {
+            if let Some(v4) = ip.to_ipv4_mapped() {
+                return public_ip(IpAddr::V4(v4));
+            }
+            let segments = ip.segments();
+            // Global unicast only; reject transition/documentation/special-purpose space.
+            (segments[0] & 0xe000) == 0x2000
+                && segments[0] != 0x2001
+                && segments[0] != 0x2002
+                && !(segments[0] == 0x3fff && segments[1] < 0x1000)
+        }
+    }
+}
+fn destination(url: &tauri::Url) -> Result<IpAddr, String> {
+    let host = url
+        .host_str()
+        .ok_or("Missing HTTP host.")?
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_string();
+    let port = url.port_or_known_default().ok_or("Missing HTTP port.")?;
+    let approved = crate::security::current()
+        .origins
+        .contains(&url.origin().ascii_serialization());
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let result = (host.as_str(), port)
+            .to_socket_addrs()
+            .map(|a| a.map(|s| s.ip()).collect::<Vec<_>>());
+        let _ = tx.send(result);
+    });
+    let addresses = rx
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|_| "DNS lookup timed out.")?
+        .map_err(|_| "Cannot resolve HTTP destination.")?;
+    if addresses.is_empty() || (!approved && addresses.iter().any(|ip| !public_ip(*ip))) {
+        return Err("Private, loopback, link-local, metadata or special-use destination blocked. Approve its exact origin in workspace security for local debugging.".into());
+    }
+    Ok(addresses[0])
+}
 
 pub(super) fn validate(arguments: &Value) -> Result<(), String> {
     let input = arguments
@@ -51,12 +111,32 @@ pub(super) fn validate(arguments: &Value) -> Result<(), String> {
             .as_object()
             .filter(|h| h.len() <= 30)
             .ok_or("Use at most 30 HTTP headers.")?;
+        if headers
+            .iter()
+            .map(|(k, v)| k.len() + v.as_str().map(str::len).unwrap_or(0) + 4)
+            .sum::<usize>()
+            > MAX_HEADER_BYTES as usize
+        {
+            return Err("HTTP headers exceed 16 KB.".into());
+        }
         for (key, value) in headers {
             let value = value
                 .as_str()
                 .filter(|v| v.len() <= 8192 && !v.contains(['\r', '\n']))
                 .ok_or("Invalid HTTP header value.")?;
-            if key.is_empty()
+            if [
+                "host",
+                "connection",
+                "content-length",
+                "transfer-encoding",
+                "proxy-authorization",
+                "proxy-connection",
+                "upgrade",
+                "trailer",
+                "te",
+            ]
+            .contains(&key.to_ascii_lowercase().as_str())
+                || key.is_empty()
                 || key.len() > 100
                 || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
                 || value.contains('\0')
@@ -88,6 +168,15 @@ pub(super) fn execute(
     if cancelled.load(Ordering::SeqCst) || closed.load(Ordering::SeqCst) {
         return Err("HTTP request cancelled.".into());
     }
+    let url = tauri::Url::parse(arguments["url"].as_str().unwrap()).map_err(|_| "Invalid URL.")?;
+    let ip = destination(&url)?;
+    let headers_file =
+        tempfile::NamedTempFile::new().map_err(|_| "Cannot prepare response headers.")?;
+    let host = url.host_str().unwrap();
+    let pinned = match ip {
+        IpAddr::V4(ip) => ip.to_string(),
+        IpAddr::V6(ip) => format!("[{ip}]"),
+    };
     let mut command = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" });
     command
         .args([
@@ -100,11 +189,34 @@ pub(super) fn execute(
             "30",
             "--proto",
             "=http,https",
+            "--noproxy",
+            "*",
+            "--proxy",
+            "",
+            "--max-redirs",
+            "0",
+            "--proto-redir",
+            "=http,https",
+            "--max-filesize",
+            "1000000",
             "--request",
         ])
         .arg(arguments["method"].as_str().unwrap_or("GET"))
         .arg("--url")
         .arg(arguments["url"].as_str().unwrap());
+    // Literal IP URLs already fix the connection address; --resolve is for DNS names.
+    if host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .parse::<IpAddr>()
+        .is_err()
+    {
+        command.arg("--resolve").arg(format!(
+            "{host}:{}:{pinned}",
+            url.port_or_known_default().unwrap()
+        ));
+    }
+    command.arg("--dump-header").arg(headers_file.path());
     if arguments["method"] == "HEAD" {
         command.arg("--head");
     }
@@ -142,6 +254,13 @@ pub(super) fn execute(
     let status = loop {
         let error = if cancelled.load(Ordering::SeqCst) || closed.load(Ordering::SeqCst) {
             Some("HTTP request cancelled.")
+        } else if headers_file
+            .as_file()
+            .metadata()
+            .map(|m| m.len() > MAX_HEADER_BYTES)
+            .unwrap_or(true)
+        {
+            Some("HTTP response headers exceeded 16 KB.")
         } else if oversized.load(Ordering::SeqCst) {
             Some("HTTP response exceeded the 1 MB limit.")
         } else if start.elapsed() > TIMEOUT {
@@ -170,7 +289,18 @@ pub(super) fn execute(
         .join()
         .map_err(|_| "Could not read HTTP response.")?
         .map_err(|_| "Could not read HTTP response.")?;
+    if headers_file
+        .as_file()
+        .metadata()
+        .map(|m| m.len() > MAX_HEADER_BYTES)
+        .unwrap_or(true)
+    {
+        return Err("HTTP response headers exceeded 16 KB.".into());
+    }
     if output.len() > MAX_RESPONSE_BYTES {
+        return Err("HTTP response exceeded the 1 MB limit.".into());
+    }
+    if status.code() == Some(63) {
         return Err("HTTP response exceeded the 1 MB limit.".into());
     }
     if !status.success() {
@@ -186,6 +316,12 @@ pub(super) fn execute(
     let status: u16 = status
         .parse()
         .map_err(|_| "Invalid HTTP response status.")?;
+    if (300..400).contains(&status) {
+        return Err(
+            "HTTP redirects are disabled. Review and approve the destination URL separately."
+                .into(),
+        );
+    }
     let body = if arguments["method"] == "HEAD" {
         json!("")
     } else if body.contains('\0')

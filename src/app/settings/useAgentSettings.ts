@@ -1,3 +1,4 @@
+import { saveCredential, removeCredential } from '../../integrations/credentialVault';
 import { useEffect, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { hostedProvider, type HostedConfig } from '../../integrations/providers';
@@ -105,10 +106,13 @@ export function useAgentSettings(setNotice: (notice: string) => void) {
       setClaudeStatus(String(error));
     }
   };
-  const configureHosted = () => {
+  const configureHosted = async () => {
     try {
       hostedProvider(hostedDraft);
-      setHosted({ ...hostedDraft });
+      const account = `provider:${new URL(hostedDraft.endpoint).origin}`;
+      await saveCredential(account, hostedDraft.token);
+      setHosted({ ...hostedDraft, token: '', credentialAccount: account });
+      setHostedDraft((draft) => ({ ...draft, token: '' }));
       setModelStatuses((all) => ({
         ...all,
         [JSON.stringify([hostedDraft.endpoint, hostedDraft.model])]:
@@ -122,7 +126,15 @@ export function useAgentSettings(setNotice: (notice: string) => void) {
       setNotice(String(e));
     }
   };
-  const clearHosted = () => {
+  const clearHosted = async () => {
+    if (hosted.credentialAccount) {
+      try {
+        await removeCredential(hosted.credentialAccount);
+      } catch {
+        setNotice('Could not remove OS credential. Try Clear again.');
+        return;
+      }
+    }
     setHosted({ endpoint: '', model: '', token: '' });
     setHostedDraft({ endpoint: '', model: '', token: '' });
     if (mode === 'hosted') setMode('codex');

@@ -74,6 +74,7 @@ export function useEvidenceSession({
   const total = files.reduce((n, f) => n + f.redactions, 0);
   function apply(next: Artifact[], custom = terms) {
     onContext(null);
+    sanitizer.current.setTerms(custom.split('\n').map((s) => s.trim()));
     const updated = sanitizeArtifacts(
       next,
       sanitizer.current,
@@ -92,12 +93,21 @@ export function useEvidenceSession({
         throw new Error('Use at most 20 artifacts per workspace.');
       const additions: Artifact[] = [];
       for (const f of Array.from(list)) {
-        const format = f.name.split('.').pop()?.toLowerCase() ?? '';
+        let format = f.name.split('.').pop()?.toLowerCase() ?? '';
         if (!SUPPORTED_FORMATS.includes(format))
-          throw new Error('Supported formats: CSV, TSV, JSON, LOG and TXT.');
+          throw new Error('Supported formats: CSV, TSV, JSON, JSONL, NDJSON, LOG and TXT.');
         if (f.size > MAX_ARTIFACT_BYTES)
           throw new Error('Each artifact must be smaller than 2 MB.');
-        const text = await f.text();
+        let text = await f.text();
+        if (format === 'jsonl' || format === 'ndjson') {
+          text = JSON.stringify(
+            text
+              .split(/\r?\n/)
+              .filter((line) => line.trim())
+              .map((line) => JSON.parse(line)),
+          );
+          format = 'json';
+        }
         if (text.includes('\0')) throw new Error('Binary files are not supported.');
         additions.push({
           id: crypto.randomUUID(),
