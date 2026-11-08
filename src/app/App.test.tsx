@@ -16,6 +16,8 @@ beforeEach(() => {
   folderPicker.mockResolvedValue(null);
 });
 afterEach(cleanup);
+const agentChoice = (group: string, name: string) =>
+  within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name });
 async function importEvidence(user: ReturnType<typeof userEvent.setup>) {
   const files = samples.map((sample) => {
     const file = new File([sample.raw], sample.name, { type: 'text/plain' });
@@ -52,9 +54,7 @@ it('keeps hosted settings across navigation, clears credentials, and never saves
   );
   await user.click(screen.getByRole('button', { name: 'Use hosted provider' }));
   await user.click(screen.getByRole('link', { name: '✳ chista' }));
-  expect((screen.getByRole('combobox', { name: 'Chat agent' }) as HTMLSelectElement).value).toBe(
-    'hosted',
-  );
+  expect(agentChoice('Chat agent', 'debug-model').getAttribute('aria-checked')).toBe('true');
 
   await openModels();
   expect((screen.getByLabelText('Model identifier') as HTMLInputElement).value).toBe('debug-model');
@@ -68,7 +68,7 @@ it('keeps hosted settings across navigation, clears credentials, and never saves
   expect(
     (screen.getByLabelText('Provider API token · not CLI credentials') as HTMLInputElement).value,
   ).toBe('');
-  expect((screen.getByLabelText('Active agent') as HTMLSelectElement).value).toBe('codex');
+  expect(agentChoice('Active agent', 'Codex').getAttribute('aria-checked')).toBe('true');
 });
 
 describe('conversation workspace', () => {
@@ -99,29 +99,27 @@ describe('conversation workspace', () => {
         .getAllByRole('button')
         .map((button) => button.textContent),
     ).toEqual(['Models', 'Workspace security', 'Data & privacy']);
-    const selector = screen.getByLabelText('Active agent') as HTMLSelectElement;
-    expect(selector.value).toBe('codex');
-    expect(Array.from(selector.options).map((o) => o.value)).toEqual(['claude', 'codex', 'hosted']);
+    const selector = screen.getByRole('radiogroup', { name: 'Active agent' });
+    expect(
+      within(selector).getByRole('radio', { name: 'Codex' }).getAttribute('aria-checked'),
+    ).toBe('true');
+    expect(within(selector).getAllByRole('radio')).toHaveLength(3);
   });
   it('switches between Claude and Codex from chat and Settings', async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.type(screen.getByRole('textbox', { name: 'Message agent' }), 'Investigate timeouts');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Chat agent' }), 'codex');
-    expect((screen.getByRole('combobox', { name: 'Chat agent' }) as HTMLSelectElement).value).toBe(
-      'codex',
-    );
+    await user.click(agentChoice('Chat agent', 'Codex'));
+    expect(agentChoice('Chat agent', 'Codex').getAttribute('aria-checked')).toBe('true');
     expect(
       (screen.getByRole('textbox', { name: 'Message agent' }) as HTMLTextAreaElement).value,
     ).toBe('Investigate timeouts');
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     await user.click(screen.getByRole('button', { name: 'Models' }));
-    expect((screen.getByLabelText('Active agent') as HTMLSelectElement).value).toBe('codex');
-    await user.selectOptions(screen.getByLabelText('Active agent'), 'claude');
+    expect(agentChoice('Active agent', 'Codex').getAttribute('aria-checked')).toBe('true');
+    await user.click(agentChoice('Active agent', 'Claude Code'));
     await user.click(screen.getByRole('link', { name: '✳ chista' }));
-    expect((screen.getByRole('combobox', { name: 'Chat agent' }) as HTMLSelectElement).value).toBe(
-      'claude',
-    );
+    expect(agentChoice('Chat agent', 'Claude Code').getAttribute('aria-checked')).toBe('true');
   });
   it('shares files and mappings across workspace sessions', async () => {
     const user = userEvent.setup();
@@ -196,7 +194,7 @@ describe('conversation workspace', () => {
     expect(screen.getByText('Included repositories · 2')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     await user.click(screen.getByRole('button', { name: 'Models' }));
-    await user.selectOptions(screen.getByLabelText('Active agent'), 'claude');
+    await user.click(agentChoice('Active agent', 'Claude Code'));
     await user.click(screen.getByRole('link', { name: '✳ chista' }));
     await user.click(screen.getByRole('button', { name: 'Switch workspace' }));
     await user.click(screen.getByRole('button', { name: 'Workspace config' }));

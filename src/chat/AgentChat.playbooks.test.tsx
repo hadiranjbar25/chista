@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { native, chatProps } from './testing/nativeChatHarness';
 import AgentChat from './AgentChat';
 const context = JSON.stringify({
@@ -23,8 +23,8 @@ it.each(['claude', 'codex'])(
     );
     const user = userEvent.setup();
     render(<AgentChat {...chatProps} context={context} mode={mode} />);
-    await user.selectOptions(screen.getByLabelText('Debugging playbook'), 'investigate-error');
-    expect(screen.getAllByRole('combobox', { name: /^Status:/ })).toHaveLength(4);
+    await user.click(screen.getByRole('radio', { name: 'Investigate an error' }));
+    expect(screen.getAllByRole('radiogroup', { name: /^Status:/ })).toHaveLength(4);
     expect(native.invoke).not.toHaveBeenCalled();
     await user.click(screen.getByLabelText('Review before sending'));
     await user.type(
@@ -39,17 +39,22 @@ it.each(['claude', 'codex'])(
     await user.click(within(dialog).getByRole('button', { name: 'Approve and send' }));
     await screen.findByText('Observed a timeout.');
     expect(
-      (screen.getByLabelText('Status: Inspect supporting evidence') as HTMLSelectElement).value,
-    ).toBe('completed');
+      within(screen.getByRole('radiogroup', { name: 'Status: Inspect supporting evidence' }))
+        .getByRole('radio', { name: 'Done' })
+        .getAttribute('aria-checked'),
+    ).toBe('true');
     expect(
-      (screen.getByLabelText('Status: Evaluate competing hypotheses') as HTMLSelectElement).value,
-    ).toBe('blocked');
+      within(screen.getByRole('radiogroup', { name: 'Status: Evaluate competing hypotheses' }))
+        .getByRole('radio', { name: 'Blocked' })
+        .getAttribute('aria-checked'),
+    ).toBe('true');
     expect(screen.getByText(/reported completion without/)).toBeTruthy();
     // The conversation shows the user's prompt, rather than the expanded internal procedure.
     expect(screen.getByRole('log').textContent).not.toContain('Checklist:');
-    await user.selectOptions(
-      screen.getByLabelText('Status: Evaluate competing hypotheses'),
-      'completed',
+    await user.click(
+      within(
+        screen.getByRole('radiogroup', { name: 'Status: Evaluate competing hypotheses' }),
+      ).getByRole('radio', { name: 'Done' }),
     );
     expect(screen.getByText('Confirmed by you')).toBeTruthy();
   },
@@ -57,15 +62,20 @@ it.each(['claude', 'codex'])(
 it('revokes stale previews when the playbook or checklist changes, without executing tools', async () => {
   const user = userEvent.setup();
   render(<AgentChat {...chatProps} />);
-  await user.selectOptions(screen.getByLabelText('Debugging playbook'), 'incident-report');
+  await user.click(screen.getByRole('radio', { name: 'Draft an incident report' }));
   await user.click(screen.getByLabelText('Review before sending'));
   await user.type(screen.getByLabelText('Message agent'), 'Draft a report{Enter}');
   expect(screen.getByRole('dialog')).toBeTruthy();
-  await user.selectOptions(screen.getByLabelText('Status: Assess observed impact'), 'blocked');
+  await user.click(
+    within(screen.getByRole('radiogroup', { name: 'Status: Assess observed impact' })).getByRole(
+      'radio',
+      { name: 'Blocked' },
+    ),
+  );
   expect(screen.queryByRole('dialog')).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Send' }));
   expect(screen.getByRole('dialog')).toBeTruthy();
-  await user.selectOptions(screen.getByLabelText('Debugging playbook'), 'compare-traces');
+  await user.click(screen.getByRole('radio', { name: 'Compare traces' }));
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(native.invoke).not.toHaveBeenCalled();
 });
@@ -87,9 +97,29 @@ it('blocks unregistered slash commands locally and disables task changes during 
     screen.getByLabelText('Message agent'),
     '/compare-traces compare the requests{Enter}',
   );
-  expect((screen.getByLabelText('Debugging playbook') as HTMLSelectElement).disabled).toBe(true);
   expect(
-    (screen.getByLabelText('Status: Identify comparable traces') as HTMLSelectElement).disabled,
+    (screen.getByRole('radio', { name: 'Compare traces' }) as HTMLButtonElement).disabled,
+  ).toBe(true);
+  expect(
+    (
+      within(
+        screen.getByRole('radiogroup', { name: 'Status: Identify comparable traces' }),
+      ).getByRole('radio', { name: 'Pending' }) as HTMLButtonElement
+    ).disabled,
   ).toBe(true);
   await act(async () => finish('{"text":"Need two traces.","blocks":[]}'));
+});
+
+it('keeps the workflow chooser in view until a conversation starts', async () => {
+  const scroll = vi.spyOn(window, 'scrollTo');
+  const height = vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(2000);
+  try {
+    const user = userEvent.setup();
+    render(<AgentChat {...chatProps} />);
+    await user.click(screen.getByRole('radio', { name: 'Investigate an error' }));
+    expect(scroll).not.toHaveBeenCalled();
+  } finally {
+    scroll.mockRestore();
+    height.mockRestore();
+  }
 });

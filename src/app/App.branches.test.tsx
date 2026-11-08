@@ -17,10 +17,7 @@ it('creates a branch in the same workspace, preserves the original, and resumes 
   });
   const user = userEvent.setup();
   render(<App />);
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Debugging playbook' }),
-    'investigate-error',
-  );
+  await user.click(screen.getByRole('radio', { name: 'Investigate an error' }));
   await user.type(
     screen.getByRole('textbox', { name: 'Message agent' }),
     'Debug the failure{Enter}',
@@ -32,8 +29,8 @@ it('creates a branch in the same workspace, preserves the original, and resumes 
     'original session is preserved',
   );
   expect(
-    (screen.getByRole('combobox', { name: 'Debugging playbook' }) as HTMLSelectElement).value,
-  ).toBe('investigate-error');
+    screen.getByRole('radio', { name: 'Investigate an error' }).getAttribute('aria-checked'),
+  ).toBe('true');
   expect(turns).toBe(1);
   await user.type(
     screen.getByRole('textbox', { name: 'Message agent' }),

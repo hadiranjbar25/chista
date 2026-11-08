@@ -1,3 +1,4 @@
+import AgentPicker from './AgentPicker';
 import { Terminal } from 'lucide-react';
 import FullscreenSection from '../../components/FullscreenSection';
 import ModelPicker from './ModelPicker';
@@ -41,16 +42,7 @@ export default function ModelSettings({ settings }: { settings: AgentSettings })
             <p>Switch between Claude Code, Codex and a hosted provider. No local models.</p>
           </div>
         </div>
-        <label className="field">
-          Active agent
-          <select value={mode} onChange={(e) => setMode(e.target.value)}>
-            <option value="claude">Claude Code · in-app chat</option>
-            <option value="codex">Codex · in-app chat</option>
-            <option value="hosted" disabled={!hosted.endpoint}>
-              Hosted chat provider{!hosted.endpoint ? ' · configure below' : ''}
-            </option>
-          </select>
-        </label>
+        <AgentPicker value={mode} onChange={setMode} hosted={hosted} />
         {(mode === 'claude' || mode === 'codex') && (
           <ModelPicker
             key={mode}

@@ -26,27 +26,33 @@ export default function ChatMessages({ chat }: { chat: ChatController }) {
   return (
     <div
       ref={conversation}
-      className="messages"
+      className={`messages${!messages.length && chat.playbookId ? ' messages-planned' : ''}`}
       role="log"
       aria-live="polite"
       aria-label="Conversation"
     >
-      {!messages.length && (
-        <div className="chat-welcome">
-          <span className="welcome-mark" role="img" aria-label="Chista">
-            ✳
-          </span>
-          <h1>What are you debugging?</h1>
-          <p>
-            Describe the issue below. Add logs or data when you need evidence; review redactions
-            before sharing.
-          </p>
-          <p className="muted">
-            {isTauri()
-              ? 'The selected agent uses your existing CLI sign-in. Responses appear here with interactive charts and tables when useful.'
-              : 'Open Chista desktop to connect your agent. You can import and review files locally in this browser.'}
-          </p>
+      {!messages.length && chat.playbookId ? (
+        <div className="chat-welcome chat-welcome-compact">
+          <p>Describe the issue below. Add logs or traces to support the investigation.</p>
         </div>
+      ) : (
+        !messages.length && (
+          <div className="chat-welcome">
+            <span className="welcome-mark" role="img" aria-label="Chista">
+              ✳
+            </span>
+            <h1>What are you debugging?</h1>
+            <p>
+              Describe the issue below. Add logs or data when you need evidence; review redactions
+              before sharing.
+            </p>
+            <p className="muted">
+              {isTauri()
+                ? 'The selected agent uses your existing CLI sign-in. Responses appear here with interactive charts and tables when useful.'
+                : 'Open Chista desktop to connect your agent. You can import and review files locally in this browser.'}
+            </p>
+          </div>
+        )
       )}
       {messages.map((m, i) => (
         <Fragment key={i}>

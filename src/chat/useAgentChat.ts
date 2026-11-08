@@ -122,7 +122,11 @@ export function useAgentChat({
   const [reconnectRequired, setReconnectRequired] = useState(false);
   const sanitizer = useRef(initialBranch?.sanitizer ?? sharedSanitizer ?? new Sanitizer('CHAT'));
   const composer = useRef<HTMLTextAreaElement>(null);
-  const { content: conversation, paused: scrollPaused, jumpToLatest } = useChatScroll(active);
+  const {
+    content: conversation,
+    paused: scrollPaused,
+    jumpToLatest,
+  } = useChatScroll(active && (busy || messages.length > 0));
   const conversationState = useRef(new CliConversation());
   const abort = useRef<AbortController | null>(null);
   const mounted = useRef(true);

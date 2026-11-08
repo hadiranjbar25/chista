@@ -1,3 +1,4 @@
+import AgentPicker from '../app/settings/AgentPicker';
 import ModelPicker from '../app/settings/ModelPicker';
 import { useEffect, useState } from 'react';
 import { ArrowRight, X } from 'lucide-react';
@@ -58,7 +59,7 @@ export default function ChatComposer({
         if (canSend) sendMessage();
       }}
     >
-      {scrollPaused && (
+      {scrollPaused && chat.messages.length > 0 && (
         <button type="button" className="jump-to-latest" onClick={jumpToLatest}>
           ↓ Jump to latest
         </button>
@@ -141,17 +142,13 @@ export default function ChatComposer({
       <div className="composer-actions">
         <div className="composer-options">
           {onAgentChange && (
-            <select
-              aria-label="Chat agent"
+            <AgentPicker
+              compact
               value={mode}
-              onChange={(e) => onAgentChange(e.target.value)}
-            >
-              <option value="claude">Claude Code</option>
-              <option value="codex">Codex</option>
-              {hosted.endpoint && (
-                <option value="hosted">{hosted.model || 'Hosted provider'}</option>
-              )}
-            </select>
+              onChange={onAgentChange}
+              hosted={hosted}
+              disabled={busy}
+            />
           )}
           {(mode === 'claude' || mode === 'codex') &&
             onModelChange &&
